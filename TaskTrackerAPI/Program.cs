@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using System.Text;
 using TaskTrackerAPI.Services.Auth;
+using Microsoft.Extensions.Logging;
 
 namespace TaskTrackerAPI
 {
@@ -19,7 +20,12 @@ namespace TaskTrackerAPI
 
             // Database
             builder.Services.AddDbContext<TaskTrackerContext>(options =>
-                options.UseSqlServer(builder.Configuration.GetConnectionString("TaskTrackerDatabase")));
+            {
+                options.UseSqlServer(
+                    builder.Configuration.GetConnectionString("TaskTrackerDatabase"));
+
+                options.LogTo(Console.WriteLine, LogLevel.Information);
+            });
 
             // Dependency Injection - Repository Layer
             builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
@@ -36,6 +42,8 @@ namespace TaskTrackerAPI
             builder.Services.AddScoped<IAuthService, AuthService>();
             builder.Services.AddScoped<IJwtService, JwtService>();
             builder.Services.AddScoped<IUnitOfWork, TaskTrackerAPI.UnitOfWork.UnitOfWork>();
+            builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+
 
             builder.Services.AddAuthentication(options =>
             {
@@ -64,8 +72,14 @@ namespace TaskTrackerAPI
                     };
                 }
             });
+            // Add HttpContextAccessor for accessing the current user
+            builder.Services.AddHttpContextAccessor();
 
-            
+            // AutoMapper
+            builder.Services.AddAutoMapper(config =>
+            {
+            }, typeof(TaskMappingProfile));
+
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy("AngularPolicy", policy =>
@@ -119,6 +133,7 @@ namespace TaskTrackerAPI
 
             app.UseCors("AngularPolicy");
 
+            app.UseAuthentication();
             app.UseAuthorization();
 
             app.MapControllers();

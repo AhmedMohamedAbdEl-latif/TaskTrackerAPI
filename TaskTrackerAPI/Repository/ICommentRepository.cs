@@ -6,6 +6,8 @@
         Task<Comment?> GetByIdAsync(int id);
 
         List<Comment?> GetByTaskId(int taskId);
+
+        Task<List<CommentResponseDto>> GetAllProjectedAsync();
         void Create(Comment comment);
         void Update(Comment comment);
         void Delete(int id);

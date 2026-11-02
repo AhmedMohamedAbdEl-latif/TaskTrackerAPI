@@ -1,14 +1,17 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using AutoMapper.QueryableExtensions;
+using Microsoft.EntityFrameworkCore;
 
 namespace TaskTrackerAPI.Repository
 {
     public class UserRepository : IUserRepository
     {
         private readonly TaskTrackerContext context;
+        private readonly AutoMapper.IConfigurationProvider _mapperConfig;
 
-        public UserRepository(TaskTrackerContext _context)
+        public UserRepository(TaskTrackerContext _context, AutoMapper.IConfigurationProvider mapperConfig)
         {
             context = _context;
+            _mapperConfig = mapperConfig;
         }
         public void Create(User user)
         {
@@ -39,6 +42,7 @@ namespace TaskTrackerAPI.Repository
            return await context.Users.FirstOrDefaultAsync(u => u.Id == id);
         }
 
+        // Retrieves all entities from the database and maps them to DTOs in the Service layer using AutoMapper.
         public async Task<List<User>> ListAllAsync()
         {
          return await context.Users.ToListAsync();
@@ -48,6 +52,22 @@ namespace TaskTrackerAPI.Repository
         {
             context.Users.Update(user);
         }
-        
+
+        // Retrieves data using AutoMapper's ProjectTo<TDto>() to project directly at the database level.
+        public async Task<List<UserResponseDto>> GetAllProjectedAsync()
+        {
+            return await context.Users
+                //.Select(user => new UserResponseDto
+                //{
+                //    Id = user.Id,
+                //    Name = user.Name,
+                //    Email = user.Email,
+                //    Role = user.Role
+                //})
+                .ProjectTo<UserResponseDto>(_mapperConfig)
+                .ToListAsync();
+        }
+
+
     }
 }

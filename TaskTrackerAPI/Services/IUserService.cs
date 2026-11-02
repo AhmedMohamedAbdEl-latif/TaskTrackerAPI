@@ -2,10 +2,11 @@
 {
     public interface IUserService
     {
-        Task<List<User>> ListAllAsync();
-        Task<User?> FindByIDAsync(int id);
-        Task<ServiceResult<User>> CreateAsync(UserDto userDto);
-        Task<ServiceResult<User>> UpdateAsync(int id, UserDto userDto);
-        void Delete(int id);
+        Task<List<UserResponseDto>> ListAllAsync();
+        Task<UserResponseDto?> FindByIDAsync(int id);
+        Task<ServiceResult<UserResponseDto>> CreateAsync(UserDto userDto);
+        Task<ServiceResult<UserResponseDto>> UpdateAsync(int id, UserDto userDto);
+        Task<ServiceResult> DeleteAsync(int id);
+        Task<List<UserResponseDto>> GetAllProjectedAsync();
     }
 }

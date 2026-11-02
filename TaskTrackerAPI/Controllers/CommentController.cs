@@ -1,23 +1,23 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
+﻿// GET: api/comments:  Entity-based retrieval followed by mapping in the Service layer.
+// GET: api/comments/projected: Direct DTO projection at the database level using ProjectTo<TDto>().
+
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace TaskTrackerAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class CommentController : ApiControllerBase
+    public class CommentsController : ApiControllerBase
     {
         private readonly ICommentService commentService;
-        private readonly IUnitOfWork unitOfWork;
 
-        public CommentController(ICommentService _commentService, IUnitOfWork _unitOfWork)
+        public CommentsController(ICommentService _commentService)
         {
             commentService = _commentService;
-            unitOfWork = _unitOfWork;
         }
-        // GET: api/comment
-        [Authorize]
+        // GET: api/comments
+        [Authorize(Roles = "Admin")]
         [HttpGet]
         public async Task<IActionResult> GetAllComments()
         {
@@ -25,78 +25,79 @@ namespace TaskTrackerAPI.Controllers
 
             return Ok(comments);
         }
+        // GET: api/comments/projected
+        [Authorize(Roles = "Admin")]
+        [HttpGet("projected")]
+        public async Task<IActionResult> GetAllProjected()
+        {
+            var comments = await commentService.GetAllProjectedAsync();
+            return Ok(comments);
+        }
+
         // GET: api/comment/{id}
         [Authorize]
         [HttpGet("{Id}")]
         public async Task<IActionResult> FindByID(int Id)
         {
-            var comment = await commentService.GetByIdAsync(Id);
-            if (comment == null)
-                return NotFound();
+            var result = await commentService.GetByIdAsync(Id);
 
-            return Ok(comment);
+            if (!result.Success)
+                return HandleError(result);
+
+            return Ok(result.Data);
         }
+
         // GET: api/comment/task/{taskId}
         [Authorize]
         [HttpGet("task/{taskId}")]
-        public IActionResult GetCommentsByTaskId(int taskId)
+        public async Task<IActionResult> GetCommentsByTaskId(int taskId)
         {
-            var comments = commentService.GetByTaskId(taskId);
+            var result = await commentService.GetByTaskIdAsync(taskId);
 
-            return Ok(comments);
+            if (!result.Success)
+                return HandleError(result);
+
+            return Ok(result.Data);
         }
+
         // PUT: api/comment
         [Authorize]
         [HttpPut("{Id}")]
         public async Task<IActionResult> Update(int Id, UpdateCommentDto commentDto)
         {
-            if (ModelState.IsValid)
-            {
-               var result = await commentService.UpdateAsync(Id, commentDto);
+            var result = await commentService.UpdateAsync(Id, commentDto);
 
-                if (!result.Success)
-                    return HandleError(result);
+            if (!result.Success)
+                return HandleError(result);
 
-                await unitOfWork.SaveChangesAsync();
-
-                return NoContent();
-            }
-            return BadRequest(ModelState);
+            return Ok(result.Data);
         }
+
         // POST: api/comment
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> Create(CreateCommentDto commentDto)
         {
-            if (ModelState.IsValid)
-            {
                 var result = await commentService.CreateAsync(commentDto);
 
                 if (!result.Success)
                     return HandleError(result);
 
-                await unitOfWork.SaveChangesAsync();
-
                 return CreatedAtAction(nameof(FindByID), new {Id = result.Data.Id}, result.Data);
-
-            }
-            return BadRequest(ModelState);
         }
+
         // DELETE: api/comment/{id}
-        [Authorize(Roles = "Admin")]
+        [Authorize]
         [HttpDelete("{Id}")]
         public async Task<IActionResult> Delete(int Id)
         {
-            if(Id <= 0)
-                return BadRequest("Invalid Comment ID");  
-            
-            var comment = await commentService.GetByIdAsync(Id);
+            if (Id <= 0)
+                return BadRequest("Invalid Comment ID");
 
-            if (comment == null)
-                return NotFound();
+            var result = await commentService.DeleteAsync(Id);
 
-            commentService.Delete(Id);
-            await unitOfWork.SaveChangesAsync();
+            if (!result.Success)
+                return HandleError(result);
 
             return NoContent();
         }

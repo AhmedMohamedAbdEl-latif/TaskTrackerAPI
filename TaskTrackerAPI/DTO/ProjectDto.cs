@@ -4,10 +4,11 @@ namespace TaskTrackerAPI.DTO
 {
     public class ProjectDto
     {
-        [Required]
+        [Required(ErrorMessage = "Project name is required.")]
         [MaxLength(100)]
         public string Name { get; set; }
-        [Required]
+
+        [Required(ErrorMessage = "Owner ID is required.")]
         public int? OwnerId { get; set; }
     }
 }

@@ -1,4 +1,8 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿// GET: api/projects:  Entity-based retrieval followed by mapping in the Service layer.
+// GET: api/projects/projected: Direct DTO projection at the database level using ProjectTo<TDto>().
+
+
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace TaskTrackerAPI.Controllers
@@ -9,12 +13,11 @@ namespace TaskTrackerAPI.Controllers
     {
         // Dependency Injection
         private readonly IProjectService _projectService;
-        private readonly IUnitOfWork _unitOfWork;
+
         // Constructor
-        public ProjectsController(IProjectService projectService, IUnitOfWork unitOfWork)
+        public ProjectsController(IProjectService projectService)
         {
             _projectService = projectService;
-            _unitOfWork = unitOfWork;
         }
         // GET: api/projects
         [Authorize]
@@ -25,30 +28,34 @@ namespace TaskTrackerAPI.Controllers
 
             return Ok(projects);
         }
+        [Authorize(Roles = "Admin")]
+        [HttpGet("projected")]
+        public async Task<IActionResult> GetAllProjected()
+        {
+            var projects = await _projectService.GetAllProjectedAsync();
+            return Ok(projects);
+        }
         // GET: api/projects/{id}
         [Authorize(Roles = "Admin")]
         [HttpPost]
         public async Task<IActionResult> Create(ProjectDto projectDto)
         {
-            if (ModelState.IsValid)
-            {
                 var result = await _projectService.CreateAsync(projectDto);
 
                 if (!result.Success)
-                    return HandleError(result);
-                
-                await _unitOfWork.SaveChangesAsync();
+                    return HandleError(result); 
 
                 return CreatedAtAction(nameof(FindByID), new { Id = result.Data.Id }, result.Data);
 
-            }
-            return BadRequest(ModelState);
         }
         // GET: api/projects/{id}
         [Authorize]
         [HttpGet("{Id}")]
         public async Task<IActionResult> FindByID(int Id)
         {
+            if (Id <= 0)
+                return BadRequest("Invalid Project ID");
+
             var project = await _projectService.FindByIDAsync(Id);
             if(project == null)
                 return NotFound();
@@ -60,36 +67,27 @@ namespace TaskTrackerAPI.Controllers
         [HttpPut("{Id}")]
         public async Task<IActionResult> Update(int Id, ProjectDto projectDto)
         {
-            if (ModelState.IsValid)
-            {
                 var result = await _projectService.UpdateAsync(Id, projectDto);
 
                 if (!result.Success)
                     return HandleError(result);
 
-                await _unitOfWork.SaveChangesAsync();
-
                 return NoContent();
 
-            }
-            return BadRequest(ModelState);
         }
+
         // DELETE: api/projects/{id}
         [Authorize(Roles = "Admin")]
         [HttpDelete("{Id}")]
         public async Task<IActionResult> Delete(int Id)
         {
-            if(Id <= 0)
+            if (Id <= 0)
                 return BadRequest("Invalid Project ID");
 
-            var project = await _projectService.FindByIDAsync(Id);
+            var result = await _projectService.DeleteAsync(Id);
 
-            if(project == null)
-                return NotFound();
-
-            _projectService.Delete(Id);
-
-            await _unitOfWork.SaveChangesAsync();
+            if (!result.Success)
+                return HandleError(result);
 
             return NoContent();
         }

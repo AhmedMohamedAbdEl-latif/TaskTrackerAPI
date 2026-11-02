@@ -1,32 +1,35 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using AutoMapper.QueryableExtensions;
 
 namespace TaskTrackerAPI.Repository
 {
     public class CommentRepository : ICommentRepository
     {
-        private readonly TaskTrackerContext context;
+        private readonly TaskTrackerContext _context;
+        private readonly AutoMapper.IConfigurationProvider _mapperConfig;
 
-        public CommentRepository(TaskTrackerContext _context)
+        public CommentRepository(TaskTrackerContext context, AutoMapper.IConfigurationProvider mapperConfig)
         {
-            context = _context;
+            _context = context;
+            _mapperConfig = mapperConfig;
         }
         public void Create(Comment comment)
         {
-           context.Add(comment);
+           _context.Add(comment);
         }
 
         public void Delete(int id)
         {
-            var comment = context.Comments.FirstOrDefault(c => c.Id == id);
+            var comment = _context.Comments.FirstOrDefault(c => c.Id == id);
             if (comment != null)
             {
-                context.Comments.Remove(comment);
+                _context.Comments.Remove(comment);
             }
         }
 
         public async Task<Comment> GetByIdAsync(int id)
         {
-           return await context.Comments
+           return await _context.Comments
                 .Include(c => c.Task)
                 .Include(c => c.User)
                 .FirstOrDefaultAsync(c => c.Id == id);
@@ -34,7 +37,7 @@ namespace TaskTrackerAPI.Repository
 
         public List<Comment> GetByTaskId(int taskId)
         {
-            return context.Comments
+            return _context.Comments
                 .Include(c => c.Task)
                 .ThenInclude(t => t.Project)
                 .ThenInclude(p=> p.Owner)
@@ -42,18 +45,34 @@ namespace TaskTrackerAPI.Repository
                 .Where(c => c.TaskId == taskId)
                 .ToList();
         }
-
+        // Retrieves all entities from the database and maps them to DTOs in the Service layer using AutoMapper.
         public async Task<List<Comment>> ListAllAsync()
         {
-           return await context.Comments
-                .Include(c => c.Task)
-                .Include(c => c.User)
+           return await _context.Comments
+                //.Include(c => c.Task)
+                //.Include(c => c.User)
                 .ToListAsync();
         }
 
         public void Update(Comment comment)
         {
-            context.Comments.Update(comment);
+            _context.Comments.Update(comment);
+        }
+
+        // Retrieves data using AutoMapper's ProjectTo<TDto>() to project directly at the database level.
+        public async Task<List<CommentResponseDto>> GetAllProjectedAsync()
+        {
+            return await _context.Comments
+                //.Select(comment => new CommentResponseDto
+                //{
+                //    Id = comment.Id,
+                //    UserId = comment.UserId,
+                //    TaskId = comment.TaskId,
+                //    Content = comment.Content,
+                //    CreatedAt = comment.CreatedAt
+                //})
+                .ProjectTo<CommentResponseDto>(_mapperConfig)
+                .ToListAsync();
         }
     }
 }

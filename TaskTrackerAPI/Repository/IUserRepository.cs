@@ -6,6 +6,7 @@
         Task<User?> FindByIDAsync(int id);
         Task<User?> FindByEmailAsync(string email);
         Task<bool> ExistsAsync(int id);
+        Task<List<UserResponseDto>> GetAllProjectedAsync();
         void Update(User user);
         void Delete(int id);
         void Create(User user);

@@ -2,11 +2,20 @@
 {
     public interface IProjectService
     {
-        Task<List<Project>> GetAllAsync();
-        Task<Project?> FindByIDAsync(int id);
-        Task<ServiceResult<Project>> CreateAsync(ProjectDto projectDto);
-        Task<ServiceResult<Project>> UpdateAsync(int id, ProjectDto projectDto);
-        void Delete(int id);
+        Task<List<ProjectResponseDto>> GetAllAsync();
 
+        Task<ProjectResponseDto?> FindByIDAsync(int id);
+
+        Task<ServiceResult<ProjectResponseDto>> CreateAsync(
+            ProjectDto projectDto);
+
+        Task<ServiceResult<ProjectResponseDto>> UpdateAsync(
+            int id, ProjectDto projectDto);
+
+        Task<ServiceResult> DeleteAsync(int id);
+
+        Task<List<ProjectResponseDto>> GetAllProjectedAsync();
     }
+
 }
+

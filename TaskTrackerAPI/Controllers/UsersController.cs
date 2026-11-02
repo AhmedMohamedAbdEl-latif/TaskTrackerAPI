@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
+﻿// GET: api/Users:  Entity-based retrieval followed by mapping in the Service layer.
+// GET: api/Users/projected: Direct DTO projection at the database level using ProjectTo<TDto>().
+
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace TaskTrackerAPI.Controllers
@@ -10,11 +12,12 @@ namespace TaskTrackerAPI.Controllers
     {
         private readonly IUserService userService;
         private readonly IUnitOfWork unitOfWork;
-
-        public UsersController(IUserService _userService, IUnitOfWork _unitOfWork)
+        private readonly ICurrentUserService _currentUser;
+        public UsersController(IUserService _userService, IUnitOfWork _unitOfWork, ICurrentUserService currentUser)
         {
             userService = _userService;
             unitOfWork = _unitOfWork;
+            _currentUser = currentUser;
         }
         // GET: api/users
         [HttpGet]
@@ -25,11 +28,24 @@ namespace TaskTrackerAPI.Controllers
 
             return Ok(users);
         }
-        // GET: api/users/{id}
+
+        // GET: api/users/projected
         [Authorize(Roles = "Admin")]
+        [HttpGet("projected")]
+        public async Task<IActionResult> GetAllProjected()
+        {
+            var users = await userService.GetAllProjectedAsync();
+            return Ok(users);
+        }
+
+        // GET: api/users/{id}
+        [Authorize]
         [HttpGet("{id}")]
         public async Task<IActionResult> FindByID(int id)
         {
+            if (!_currentUser.IsAdmin && _currentUser.UserId != id)
+                return Forbid();
+
             var user = await userService.FindByIDAsync(id);
 
             if (user == null)
@@ -41,8 +57,7 @@ namespace TaskTrackerAPI.Controllers
         //[HttpPost]
         //public async Task<IActionResult> Create(UserDto userDto)
         //{
-        //    if (ModelState.IsValid)
-        //    {
+        //    
         //       var result = await userService.CreateAsync(userDto);
 
         //        if (!result.Success)
@@ -51,29 +66,26 @@ namespace TaskTrackerAPI.Controllers
         //        await unitOfWork.SaveChangesAsync();
 
         //        return CreatedAtAction(nameof(FindByID), new { Id = result.Data.Id }, result.Data);
-        //    }
-
-        //    return BadRequest(ModelState);
         // }
 
 
         // PUT: api/users/{id}
-        [Authorize(Roles = "Admin")]
+        [Authorize]
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(int id, UserDto userDto)
         {
-            if (ModelState.IsValid)
-            {
-                var result = await userService.UpdateAsync(id, userDto);
+            if (!_currentUser.IsAdmin && _currentUser.UserId != id)
+                return Forbid();
+
+            var result = await userService.UpdateAsync(id, userDto);
 
                 if(!result.Success)
                     return HandleError(result);
 
                 await unitOfWork.SaveChangesAsync();
 
-                return NoContent();
-            }
-            return BadRequest(ModelState);
+            return NoContent();
+            
         }
         // DELETE: api/users/{id}
         [Authorize(Roles = "Admin")]
@@ -83,12 +95,11 @@ namespace TaskTrackerAPI.Controllers
             if (id <= 0)
                 return BadRequest("Invalid user ID");
 
-            var user = await userService.FindByIDAsync(id);
+            var result = await userService.DeleteAsync(id);
 
-            if (user == null)
-                return NotFound();
+            if (!result.Success)
+                return HandleError(result);
 
-            userService.Delete(id);
             await unitOfWork.SaveChangesAsync();
 
             return NoContent();

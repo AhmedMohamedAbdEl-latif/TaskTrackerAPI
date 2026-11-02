@@ -10,7 +10,9 @@ namespace TaskTrackerAPI.Controllers
             {
                 ServiceErrorType.NotFound => NotFound(result),
                 ServiceErrorType.Validation => BadRequest(result),
+                ServiceErrorType.Unauthorized => Unauthorized(result),
                 ServiceErrorType.Forbidden => Forbid(),
+                ServiceErrorType.Conflict => Conflict(result),
                 _ => BadRequest(result)
             };
         }

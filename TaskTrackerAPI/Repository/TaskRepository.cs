@@ -1,14 +1,17 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using AutoMapper.QueryableExtensions;
+using Microsoft.EntityFrameworkCore;
 
 namespace TaskTrackerAPI.Repository
 {
     public class TaskRepository : ITaskRepository
     {
         private readonly TaskTrackerContext context;
+        private readonly AutoMapper.IConfigurationProvider _mapperConfig;
 
-        public TaskRepository(TaskTrackerContext _context)
+        public TaskRepository(TaskTrackerContext _context, AutoMapper.IConfigurationProvider mapperConfig)
         {
             context = _context;
+            _mapperConfig = mapperConfig;               
         }
         public void Create(ProjectTask task)
         {
@@ -32,7 +35,6 @@ namespace TaskTrackerAPI.Repository
         {
             return await context.Tasks
                  .Include(t => t.Project)
-                 .Include(t => t.AssignedUser)
                  .FirstOrDefaultAsync(t => t.Id == id);
         }
         public List<ProjectTask> GetByProjectID(int projectId)
@@ -80,17 +82,75 @@ namespace TaskTrackerAPI.Repository
 
         }
 
+        // Retrieves all entities from the database and maps them to DTOs in the Service layer using AutoMapper.
         public async Task<List<ProjectTask>> ListAllAsync()
         {
-            return await context.Tasks
-                 .Include(t => t.Project)
-                 .Include(t => t.AssignedUser)
-                 .ToListAsync();
+            return await context.Tasks.ToListAsync();
         }
 
         public void Update(ProjectTask task)
         {
             context.Tasks.Update(task);
+        }
+
+        // Retrieves data using AutoMapper's ProjectTo<TDto>() to project directly at the database level.
+        public async Task<List<TaskResponseDto>> GetAllProjectedAsync()
+        {
+            return await context.Tasks
+                //.Select(task => new TaskResponseDto
+                //{
+                //    Id = task.Id,
+                //    Title = task.Title,
+                //    Description = task.Description,
+                //    DueDate = task.DueDate,
+                //    Status = task.Status,
+                //    ProjectId = task.ProjectId,
+                //    AssignedUserId = task.AssignedUserId,
+                //})
+                .ProjectTo<TaskResponseDto>(_mapperConfig)
+                .ToListAsync();
+        }
+
+        public async Task<bool> CanUserAccessTaskAsync(int taskId, int userId)
+        {
+            return await context.Tasks.AnyAsync(t =>
+                t.Id == taskId &&
+                (t.AssignedUserId == userId ||
+                 t.Project.OwnerId == userId));
+        }
+
+
+        public async Task<List<ProjectTask>> GetAccessibleTasksByProjectAsync(
+           int projectId,
+           int userId)
+        {
+            return await context.Tasks
+                .Where(t =>
+                    t.ProjectId == projectId &&
+                    (t.AssignedUserId == userId ||
+                     t.Project.OwnerId == userId))
+                .ToListAsync();
+        }
+
+        public async Task<List<ProjectTask>> GetAccessibleTasksByStatusAsync(
+             ProjectTaskStatus status,
+             int userId)
+        {
+            return await context.Tasks
+                .Where(t =>
+                    t.Status == status &&
+                    (t.AssignedUserId == userId ||
+                     t.Project.OwnerId == userId))
+                .ToListAsync();
+        }
+
+        public async Task<List<ProjectTask>> GetAccessibleTasksAsync(int userId)
+        {
+            return await context.Tasks
+                .Where(t =>
+                    t.AssignedUserId == userId ||
+                    t.Project.OwnerId == userId)
+                .ToListAsync();
         }
     }
 }

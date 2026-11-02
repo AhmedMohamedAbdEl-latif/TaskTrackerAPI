@@ -7,6 +7,8 @@ namespace TaskTrackerAPI.Common
     {
         Validation,
         NotFound,
-        Forbidden
+        Unauthorized,
+        Forbidden,
+        Conflict,
     }
 }
