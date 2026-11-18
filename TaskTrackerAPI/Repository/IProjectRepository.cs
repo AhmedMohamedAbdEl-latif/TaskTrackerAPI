@@ -1,17 +1,43 @@
-﻿namespace TaskTrackerAPI.Repository
+﻿
+namespace TaskTrackerAPI.Repository
 {
     public interface IProjectRepository
     {
-        Task<List<Project>> GetAllAsync();
-        Task<Project?> FindByIDAsync(int id);
-        Task<List<ProjectResponseDto>> GetAllProjectedAsync();
-        Task<List<Project>> GetAccessibleProjectsAsync(int userId);
-        Task<bool> HasTaskAssignedToUserAsync(int projectId, int userId);
-        Task<bool> ExistsAsync(int id);
-        Task<bool> HasTasksAsync(int projectId);
-        Task<bool> HasProjectsAsync(int userId);
+        Task<List<Project>> GetAllAsync(
+            CancellationToken cancellationToken = default);
+
+        Task<Project?> FindByIDAsync(
+            int id,
+            CancellationToken cancellationToken = default);
+
+        Task<List<ProjectResponseDto>> GetAllProjectedAsync(
+            CancellationToken cancellationToken = default);
+
+        Task<List<Project>> GetAccessibleProjectsAsync(
+            int userId,
+            CancellationToken cancellationToken = default);
+
+        Task<bool> HasTaskAssignedToUserAsync(
+            int projectId,
+            int userId,
+            CancellationToken cancellationToken = default);
+
+        Task<bool> ExistsAsync(
+            int id,
+            CancellationToken cancellationToken = default);
+
+        Task<bool> HasTasksAsync(
+            int projectId,
+            CancellationToken cancellationToken = default);
+
+        Task<bool> HasProjectsAsync(
+            int userId,
+            CancellationToken cancellationToken = default);
+
         void Create(Project project);
+
         void Update(Project project);
-        void Delete(int id);
+
+        void Delete(Project project);
     }
 }

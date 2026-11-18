@@ -4,12 +4,12 @@
     {
         Task<List<Comment>> ListAllAsync();
         Task<Comment?> GetByIdAsync(int id);
-
-        List<Comment?> GetByTaskId(int taskId);
+        Task<List<Comment>> GetByTaskIdAsync(int taskId);
 
         Task<List<CommentResponseDto>> GetAllProjectedAsync();
+        Task<bool> HasCommentsByTaskIdAsync(int taskId);
         void Create(Comment comment);
         void Update(Comment comment);
-        void Delete(int id);
+        void Delete(Comment comment);
     }
 }

@@ -1,73 +1,110 @@
-﻿using AutoMapper.QueryableExtensions;
+﻿
+using AutoMapper.QueryableExtensions;
 using Microsoft.EntityFrameworkCore;
 
 namespace TaskTrackerAPI.Repository
 {
     public class UserRepository : IUserRepository
     {
-        private readonly TaskTrackerContext context;
+        private readonly TaskTrackerContext _context;
         private readonly AutoMapper.IConfigurationProvider _mapperConfig;
 
-        public UserRepository(TaskTrackerContext _context, AutoMapper.IConfigurationProvider mapperConfig)
+        public UserRepository(
+            TaskTrackerContext context,
+            AutoMapper.IConfigurationProvider mapperConfig)
         {
-            context = _context;
+            _context = context;
             _mapperConfig = mapperConfig;
         }
+
         public void Create(User user)
         {
-            context.Users.Add(user);
+            _context.Users.Add(user);
         }
 
-        public void Delete(int id)
+        public void Delete(User user)
         {
-            var user = context.Users.FirstOrDefault(u => u.Id == id);
-            if (user != null)
-            {
-                context.Users.Remove(user);
-            }
+            _context.Users.Remove(user);
         }
 
-        public async Task<bool> ExistsAsync(int id)
+        public async Task<bool> ExistsAsync(
+            int id,
+            CancellationToken cancellationToken = default)
         {
-            return await context.Users.AnyAsync(u => u.Id == id);
+            return await _context.Users.AnyAsync(
+                u => u.Id == id,
+                cancellationToken);
         }
 
-        public async Task<User?> FindByEmailAsync(string email)
+        public async Task<User?> FindByIDAsync(
+            int id,
+            CancellationToken cancellationToken = default)
         {
-            return await context.Users.FirstOrDefaultAsync(u => u.Email == email);
-        }
-
-        public async Task<User> FindByIDAsync(int id)
-        {
-           return await context.Users.FirstOrDefaultAsync(u => u.Id == id);
-        }
-
-        // Retrieves all entities from the database and maps them to DTOs in the Service layer using AutoMapper.
-        public async Task<List<User>> ListAllAsync()
-        {
-         return await context.Users.ToListAsync();
+            return await _context.Users.FirstOrDefaultAsync(
+                u => u.Id == id,
+                cancellationToken);
         }
 
         public void Update(User user)
         {
-            context.Users.Update(user);
+            _context.Users.Update(user);
         }
 
-        // Retrieves data using AutoMapper's ProjectTo<TDto>() to project directly at the database level.
-        public async Task<List<UserResponseDto>> GetAllProjectedAsync()
+        public async Task<User?> FindByEmailAsync(
+            string email,
+            CancellationToken cancellationToken = default)
         {
-            return await context.Users
-                //.Select(user => new UserResponseDto
-                //{
-                //    Id = user.Id,
-                //    Name = user.Name,
-                //    Email = user.Email,
-                //    Role = user.Role
-                //})
-                .ProjectTo<UserResponseDto>(_mapperConfig)
-                .ToListAsync();
+            var normalizedEmail = email.Trim().ToLowerInvariant();
+
+            return await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    u => u.Email == normalizedEmail,
+                    cancellationToken);
         }
 
+        public async Task<List<User>> ListAllAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Users
+                .AsNoTracking()
+                .OrderBy(u => u.Id)
+                .ToListAsync(cancellationToken);
+        }
 
+        public async Task<List<UserResponseDto>> GetAllProjectedAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Users
+                .OrderBy(u => u.Id)
+                .ProjectTo<UserResponseDto>(_mapperConfig)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<bool> HasAssignedTasksAsync(
+            int userId,
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Tasks.AnyAsync(
+                t => t.AssignedUserId == userId,
+                cancellationToken);
+        }
+
+        public async Task<bool> HasCommentsAsync(
+            int userId,
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Comments.AnyAsync(
+                c => c.UserId == userId,
+                cancellationToken);
+        }
+
+        public async Task<int> CountAdminAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Users.CountAsync(
+                u => u.Role == "Admin",
+                cancellationToken);
+        }
     }
 }

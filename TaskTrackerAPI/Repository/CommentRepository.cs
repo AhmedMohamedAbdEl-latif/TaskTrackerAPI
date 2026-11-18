@@ -18,40 +18,39 @@ namespace TaskTrackerAPI.Repository
            _context.Add(comment);
         }
 
-        public void Delete(int id)
+        public void Delete(Comment comment)
         {
-            var comment = _context.Comments.FirstOrDefault(c => c.Id == id);
-            if (comment != null)
-            {
-                _context.Comments.Remove(comment);
-            }
+            _context.Comments.Remove(comment);
         }
 
-        public async Task<Comment> GetByIdAsync(int id)
+        public async Task<Comment?> GetByIdAsync(int id)
         {
            return await _context.Comments
-                .Include(c => c.Task)
-                .Include(c => c.User)
+
                 .FirstOrDefaultAsync(c => c.Id == id);
         }
 
-        public List<Comment> GetByTaskId(int taskId)
+        public async Task<List<Comment>> GetByTaskIdAsync(int taskId)
         {
-            return _context.Comments
-                .Include(c => c.Task)
-                .ThenInclude(t => t.Project)
-                .ThenInclude(p=> p.Owner)
-                .Include(c => c.User)
+            return await _context.Comments
+                .AsNoTracking()
                 .Where(c => c.TaskId == taskId)
-                .ToList();
+                .OrderBy(c => c.Id)
+                .ToListAsync();
         }
+
         // Retrieves all entities from the database and maps them to DTOs in the Service layer using AutoMapper.
         public async Task<List<Comment>> ListAllAsync()
         {
-           return await _context.Comments
-                //.Include(c => c.Task)
-                //.Include(c => c.User)
+            return await _context.Comments
+                .AsNoTracking()
+                .OrderBy(c => c.Id)
                 .ToListAsync();
+        }
+        public async Task<bool> HasCommentsByTaskIdAsync(int taskId)
+        {
+            return await _context.Comments
+                .AnyAsync(c => c.TaskId == taskId);
         }
 
         public void Update(Comment comment)
@@ -63,14 +62,7 @@ namespace TaskTrackerAPI.Repository
         public async Task<List<CommentResponseDto>> GetAllProjectedAsync()
         {
             return await _context.Comments
-                //.Select(comment => new CommentResponseDto
-                //{
-                //    Id = comment.Id,
-                //    UserId = comment.UserId,
-                //    TaskId = comment.TaskId,
-                //    Content = comment.Content,
-                //    CreatedAt = comment.CreatedAt
-                //})
+                .OrderBy(c => c.Id)
                 .ProjectTo<CommentResponseDto>(_mapperConfig)
                 .ToListAsync();
         }

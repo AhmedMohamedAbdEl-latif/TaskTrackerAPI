@@ -11,10 +11,21 @@ namespace TaskTrackerAPI.Controllers
                 ServiceErrorType.NotFound => NotFound(result),
                 ServiceErrorType.Validation => BadRequest(result),
                 ServiceErrorType.Unauthorized => Unauthorized(result),
-                ServiceErrorType.Forbidden => Forbid(),
+                ServiceErrorType.Forbidden => StatusCode(StatusCodes.Status403Forbidden, result),
                 ServiceErrorType.Conflict => Conflict(result),
-                _ => BadRequest(result)
+                _ => StatusCode(StatusCodes.Status500InternalServerError),
             };
+        }
+
+        protected IActionResult ForbiddenError()
+        {
+            var validationResult = new ServiceResult
+            {
+                Success = false,
+                ErrorType = ServiceErrorType.Forbidden,
+                Errors = new List<string> { "You are not allowed to perform this action." }
+            };
+            return HandleError(validationResult);
         }
     }
 }

@@ -2,7 +2,7 @@
 {
     public class ProjectService : IProjectService
     {
-        // Dependency injection 
+        // Dependency injection
         private readonly IProjectRepository _projectRepository;
         private readonly IUserRepository _userRepository;
         private readonly IMapper _mapper;
@@ -28,22 +28,27 @@
         {
             var validationResult = new ServiceResult<ProjectResponseDto>();
 
-            if (string.IsNullOrWhiteSpace(projectDto.Name))
+            // Check if the user is authenticated and has the right permissions
+            if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
             {
-                validationResult.ErrorType = ServiceErrorType.Validation;
-                validationResult.Errors.Add("Project name is required.");
+                validationResult.ErrorType = ServiceErrorType.Unauthorized;
+                validationResult.Errors.Add("User is not authenticated.");
                 return validationResult;
             }
 
-            if (!projectDto.OwnerId.HasValue || projectDto.OwnerId <= 0)
+            var currentUserId = _currentUserService.UserId.Value;
+
+            // If the user is not an admin, ensure they can only create projects for themselves
+            if (!_currentUserService.IsAdmin && projectDto.OwnerId != currentUserId)
             {
-                validationResult.ErrorType = ServiceErrorType.Validation;
-                validationResult.Errors.Add("A valid Owner ID is required.");
+                validationResult.ErrorType = ServiceErrorType.Forbidden;
+                validationResult.Errors.Add("You can only create projects for yourself.");
                 return validationResult;
             }
 
-            var owner = await _userRepository.FindByIDAsync(projectDto.OwnerId.Value);
+            var owner = await _userRepository.FindByIDAsync(projectDto.OwnerId);
 
+            // Check if the owner exists
             if (owner == null)
             {
                 validationResult.ErrorType = ServiceErrorType.NotFound;
@@ -51,13 +56,14 @@
                 return validationResult;
             }
 
-
+            // Create the project
             var project = new Project
             {
-                Name = projectDto.Name,
-                OwnerId = projectDto.OwnerId.Value
+                Name = projectDto.Name.Trim(),
+                OwnerId = projectDto.OwnerId
             };
 
+            // Save the project to the database
             _projectRepository.Create(project);
 
             await _unitOfWork.SaveChangesAsync();
@@ -72,20 +78,38 @@
         {
             var validationResult = new ServiceResult();
 
-            var existingProject = await _projectRepository.FindByIDAsync(id);
+            if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
+            {
+                validationResult.ErrorType = ServiceErrorType.Unauthorized;
+                validationResult.Errors.Add("User is not authenticated.");
+                return validationResult;
+            }
 
-            if (existingProject == null)
+            var project = await _projectRepository.FindByIDAsync(id);
+
+            if (project == null)
             {
                 validationResult.ErrorType = ServiceErrorType.NotFound;
                 validationResult.Errors.Add("Project not found.");
                 return validationResult;
             }
 
-            bool hasTasks = await _projectRepository.HasTasksAsync(id);
+            var currentUserId = _currentUserService.UserId.Value;
+
+            var isProjectOwner = project.OwnerId == currentUserId;
+
+            if (!_currentUserService.IsAdmin && !isProjectOwner)
+            {
+                validationResult.ErrorType = ServiceErrorType.Forbidden;
+                validationResult.Errors.Add("You are not allowed to delete this project.");
+                return validationResult;
+            }
+
+            var hasTasks = await _projectRepository.HasTasksAsync(id);
 
             if (hasTasks)
             {
-                validationResult.ErrorType = ServiceErrorType.Validation;
+                validationResult.ErrorType = ServiceErrorType.Conflict;
                 validationResult.Errors.Add(
                     "Cannot delete this project because it has associated tasks."
                 );
@@ -93,7 +117,7 @@
                 return validationResult;
             }
 
-            _projectRepository.Delete(id);
+            _projectRepository.Delete(project);
 
             await _unitOfWork.SaveChangesAsync();
 
@@ -165,23 +189,41 @@
         {
             var validationResult = new ServiceResult<ProjectResponseDto>();
 
-            var existingProject = await _projectRepository.FindByIDAsync(id);
+            if (!_currentUserService.IsAuthenticated || !_currentUserService.UserId.HasValue)
+            {
+                validationResult.ErrorType = ServiceErrorType.Unauthorized;
+                validationResult.Errors.Add("User is not authenticated.");
+                return validationResult;
+            }
 
-            if (existingProject == null)
+            var project = await _projectRepository.FindByIDAsync(id);
+
+            if (project == null)
             {
                 validationResult.ErrorType = ServiceErrorType.NotFound;
                 validationResult.Errors.Add("Project not found.");
                 return validationResult;
             }
 
-            if (!projectDto.OwnerId.HasValue || projectDto.OwnerId <= 0)
+            var currentUserId = _currentUserService.UserId.Value;
+
+            var isProjectOwner = project.OwnerId == currentUserId;
+
+            if (!_currentUserService.IsAdmin && !isProjectOwner)
             {
-                validationResult.ErrorType = ServiceErrorType.Validation;
-                validationResult.Errors.Add("A valid Owner ID is required.");
+                validationResult.ErrorType = ServiceErrorType.Forbidden;
+                validationResult.Errors.Add("You are not allowed to update this project.");
                 return validationResult;
             }
 
-            var owner = await _userRepository.FindByIDAsync(projectDto.OwnerId.Value);
+            if (!_currentUserService.IsAdmin && projectDto.OwnerId != project.OwnerId)
+            {
+                validationResult.ErrorType = ServiceErrorType.Forbidden;
+                validationResult.Errors.Add("Only Admin can change project ownership.");
+                return validationResult;
+            }
+
+            var owner = await _userRepository.FindByIDAsync(projectDto.OwnerId);
 
             if (owner == null)
             {
@@ -190,22 +232,17 @@
                 return validationResult;
             }
 
-            if (string.IsNullOrWhiteSpace(projectDto.Name))
+            project.Name = projectDto.Name.Trim();
+
+            if (_currentUserService.IsAdmin)
             {
-                validationResult.ErrorType = ServiceErrorType.Validation;
-                validationResult.Errors.Add("Project name is required.");
-                return validationResult;
+                project.OwnerId = owner.Id;
             }
-
-            existingProject.Name = projectDto.Name;
-            existingProject.OwnerId = owner.Id;
-
-            // _projectRepository.Update(existingProject);
 
             await _unitOfWork.SaveChangesAsync();
 
             validationResult.Success = true;
-            validationResult.Data = _mapper.Map<ProjectResponseDto>(existingProject);
+            validationResult.Data = _mapper.Map<ProjectResponseDto>(project);
 
             return validationResult;
         }

@@ -8,17 +8,17 @@ namespace TaskTrackerAPI.Models
 
         [MaxLength(70)]
         [Required]
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
 
         [MaxLength(100)]
         [Required]
-        public string Email { get; set; }
+        public string Email { get; set; } = string.Empty;
 
         [MaxLength(50)]
-        public string Role { get; set; }
+        public string Role { get; set; } = string.Empty;
 
         [MaxLength(255)]
         [Required]
-        public string PasswordHash { get; set; }
+        public string PasswordHash { get; set; } = string.Empty;
     }
 }

@@ -1,11 +1,8 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
-using System.Text;
-using TaskTrackerAPI.Services.Auth;
-using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Mvc;
+
+using TaskTrackerAPI.Extensions;
+using System.Linq;
+
 
 namespace TaskTrackerAPI
 {
@@ -16,127 +13,53 @@ namespace TaskTrackerAPI
             var builder = WebApplication.CreateBuilder(args);
 
             // MVC / API
-            builder.Services.AddControllers();
-
-            // Database
-            builder.Services.AddDbContext<TaskTrackerContext>(options =>
+            builder.Services.AddControllers().ConfigureApiBehaviorOptions(options =>
             {
-                options.UseSqlServer(
-                    builder.Configuration.GetConnectionString("TaskTrackerDatabase"));
-
-                options.LogTo(Console.WriteLine, LogLevel.Information);
-            });
-
-            // Dependency Injection - Repository Layer
-            builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
-            builder.Services.AddScoped<ITaskRepository, TaskRepository>();
-            builder.Services.AddScoped<ICommentRepository, CommentRepository>();
-            builder.Services.AddScoped<IUserRepository, UserRepository>();
-
-            // Service Layer
-            builder.Services.AddScoped<IProjectService, ProjectService>();
-            builder.Services.AddScoped<ITaskService, TaskService>();
-            builder.Services.AddScoped<ICommentService, CommentService>();
-            builder.Services.AddScoped<IUserService, UserService>();
-            builder.Services.AddScoped<PasswordHasher<User>>();
-            builder.Services.AddScoped<IAuthService, AuthService>();
-            builder.Services.AddScoped<IJwtService, JwtService>();
-            builder.Services.AddScoped<IUnitOfWork, TaskTrackerAPI.UnitOfWork.UnitOfWork>();
-            builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-
-
-            builder.Services.AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-            }).AddJwtBearer(options =>
-            {
+                options.InvalidModelStateResponseFactory = context =>
                 {
-                    var key = builder.Configuration["Jwt:SecretKey"]!;
-                    var issuer = builder.Configuration["Jwt:IssuerIP"]!;
-                    var audience = builder.Configuration["Jwt:AudienceIP"]!;
+                    var errors = context.ModelState
+                    .Values
+                    .SelectMany(modelState => modelState.Errors)
+                    .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage)
+                    ? "Invalid input."
+                    : error.ErrorMessage)
+                    .ToList();
 
-                    options.TokenValidationParameters = new TokenValidationParameters
+                    var validationResult = new ServiceResult
                     {
-                        ValidateIssuer = true,
-                        ValidateAudience = true,
-                        ValidateLifetime = true,
-                        ValidateIssuerSigningKey = true,
-
-                        ValidIssuer = issuer,
-                        ValidAudience = audience,
-
-                        IssuerSigningKey = new SymmetricSecurityKey(
-                            Encoding.UTF8.GetBytes(key))
+                        Success = false,
+                        ErrorType = ServiceErrorType.Validation,
+                        Errors = errors
                     };
-                }
-            });
-            // Add HttpContextAccessor for accessing the current user
-            builder.Services.AddHttpContextAccessor();
 
-            // AutoMapper
-            builder.Services.AddAutoMapper(config =>
-            {
-            }, typeof(TaskMappingProfile));
-
-            builder.Services.AddCors(options =>
-            {
-                options.AddPolicy("AngularPolicy", policy =>
-                {
-                    policy
-                        .WithOrigins("http://localhost:4200")
-                        .AllowAnyHeader()
-                        .AllowAnyMethod();
-                });
+                    return new BadRequestObjectResult(validationResult);
+                };
             });
 
-            // Swagger 
-            builder.Services.AddEndpointsApiExplorer();
-            #region Swagger Settings
-            builder.Services.AddSwaggerGen(swagger =>
-            {
-                swagger.SwaggerDoc("v1", new OpenApiInfo
-                {
-                    Version = "v1",
-                    Title = "ASP.NET Web API",
-                    Description = "WebAPIFirstProject"
-                });
+            // Global Exception Handling, ProblemDetails, and Logging
+            builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+            builder.Services.AddProblemDetails();
 
-                swagger.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-                {
-                    Name = "Authorization",
-                    Type = SecuritySchemeType.ApiKey,
-                    Scheme = "Bearer",
-                    BearerFormat = "JWT",
-                    In = ParameterLocation.Header,
-                    Description = "Enter 'Bearer' [space] and then your valid token"
-                });
+            // Application Services: including DbContext, Repositories, Services, Authentication, and Current User Services
+            builder.Services.AddApplicationServices(
+                 builder.Configuration,
+                 builder.Environment);
 
-                swagger.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-                {
-                    [new OpenApiSecuritySchemeReference("Bearer", document)] = []
-                });
-            });
-            #endregion
+
+            // Authentication and Authorization
+            builder.Services.AddJwtAuthentication(builder.Configuration);
+
+            // Rate Limiting, CORS, AutoMapper, HttpContextAccessor
+            builder.Services.AddInfrastructureServices();
+
+            // Swagger
+            builder.Services.AddSwaggerDocumentation();
 
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
-            if (app.Environment.IsDevelopment())
-            {
-                app.UseSwagger();
-                app.UseSwaggerUI();
-            }
-
-            app.UseHttpsRedirection();
-
-            app.UseCors("AngularPolicy");
-
-            app.UseAuthentication();
-            app.UseAuthorization();
-
-            app.MapControllers();
+            // Configure the HTTP request pipeline: including Swagger,
+            // Exception Handling, ProblemDetails, CORS, Rate Limiting, Authentication, and Authorization
+            app.ConfigurePipeline();
 
             app.Run();
         }

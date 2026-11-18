@@ -1,67 +1,63 @@
 ﻿using AutoMapper.QueryableExtensions;
 using Microsoft.EntityFrameworkCore;
+using TaskTrackerAPI.DTO.Pagination;
 
 namespace TaskTrackerAPI.Repository
 {
     public class TaskRepository : ITaskRepository
     {
-        private readonly TaskTrackerContext context;
+        private readonly TaskTrackerContext _context;
         private readonly AutoMapper.IConfigurationProvider _mapperConfig;
 
-        public TaskRepository(TaskTrackerContext _context, AutoMapper.IConfigurationProvider mapperConfig)
+        public TaskRepository(TaskTrackerContext context, AutoMapper.IConfigurationProvider mapperConfig)
         {
-            context = _context;
-            _mapperConfig = mapperConfig;               
+            _context = context;
+            _mapperConfig = mapperConfig;
         }
         public void Create(ProjectTask task)
         {
-            context.Add(task);
+            _context.Add(task);
         }
-        public void Delete(int id)
+        public void Delete(ProjectTask task)
         {
-            var task = context.Tasks.FirstOrDefault(t => t.Id == id);
-            if (task != null)
-            {
-                context.Tasks.Remove(task);
-            }
+            _context.Tasks.Remove(task);
         }
 
         public async Task<bool> ExistsAsync(int id)
         {
-            return await context.Tasks.AnyAsync(t => t.Id == id);
+            return await _context.Tasks.AnyAsync(t => t.Id == id);
         }
 
         public async Task<ProjectTask?> FindByIDAsync(int id)
         {
-            return await context.Tasks
+            return await _context.Tasks
                  .Include(t => t.Project)
                  .FirstOrDefaultAsync(t => t.Id == id);
         }
-        public List<ProjectTask> GetByProjectID(int projectId)
+        public async Task<List<ProjectTask>> GetByProjectIDAsync(int projectId)
         {
-            return context.Tasks
-                  .Where(t => t.ProjectId == projectId)
-                  .Include(t => t.Project)
-                  .Include(t => t.AssignedUser)
-                  .ToList();
+            return await _context.Tasks
+                .AsNoTracking()
+                .Where(t => t.ProjectId == projectId)
+                .OrderBy(t => t.Id)
+                .ToListAsync();
+        }
+        public async Task<List<ProjectTask>> GetByStatusAsync(ProjectTaskStatus status)
+        {
+            return await _context.Tasks
+                .AsNoTracking()
+                .Where(t => t.Status == status)
+                .OrderBy(t => t.Id)
+                .ToListAsync();
         }
 
-        public List<ProjectTask> GetByStatus(ProjectTaskStatus status)
+        public async Task<List<ProjectTask>> GetByUserIDAsync(int userId)
         {
-            return context.Tasks
-                 .Where(t => t.Status == status)
-                 .Include(t => t.Project)
-                 .Include(t => t.AssignedUser)
-                 .ToList();
-        }
-
-        public List<ProjectTask> GetByUserID(int userId)
-        {
-            return context.Tasks
+            return await _context.Tasks
+                .AsNoTracking()
                 .Where(t => t.AssignedUserId == userId)
-                .Include(t => t.Project)
-                .Include(t => t.AssignedUser)
-                .ToList();
+                .OrderBy(t => t.Id)
+                .ToListAsync();
         }
 
         public async Task<TaskStatsDto> GetStatsAsync()
@@ -70,87 +66,106 @@ namespace TaskTrackerAPI.Repository
 
             return new TaskStatsDto
             {
-                ToDo = await context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.ToDo),
+                ToDo = await _context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.ToDo),
 
-                InProgress = await context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.InProgress),
+                InProgress = await _context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.InProgress),
 
-                Done = await context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.Done),
+                Done = await _context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.Done),
 
-                OverDue = await context.Tasks.CountAsync(t => t.DueDate < now && t.Status != ProjectTaskStatus.Done),
+                OverDue = await _context.Tasks.CountAsync(t => t.DueDate < now && t.Status != ProjectTaskStatus.Done),
 
             };
 
         }
-
-        // Retrieves all entities from the database and maps them to DTOs in the Service layer using AutoMapper.
         public async Task<List<ProjectTask>> ListAllAsync()
         {
-            return await context.Tasks.ToListAsync();
+            return await _context.Tasks
+                .AsNoTracking()
+                .OrderBy(t => t.Id)
+                .ToListAsync();
         }
-
         public void Update(ProjectTask task)
         {
-            context.Tasks.Update(task);
+            _context.Tasks.Update(task);
         }
 
         // Retrieves data using AutoMapper's ProjectTo<TDto>() to project directly at the database level.
         public async Task<List<TaskResponseDto>> GetAllProjectedAsync()
         {
-            return await context.Tasks
-                //.Select(task => new TaskResponseDto
-                //{
-                //    Id = task.Id,
-                //    Title = task.Title,
-                //    Description = task.Description,
-                //    DueDate = task.DueDate,
-                //    Status = task.Status,
-                //    ProjectId = task.ProjectId,
-                //    AssignedUserId = task.AssignedUserId,
-                //})
+            return await _context.Tasks
+                .OrderBy(t => t.Id)
                 .ProjectTo<TaskResponseDto>(_mapperConfig)
                 .ToListAsync();
         }
-
         public async Task<bool> CanUserAccessTaskAsync(int taskId, int userId)
         {
-            return await context.Tasks.AnyAsync(t =>
+            return await _context.Tasks.AnyAsync(t =>
                 t.Id == taskId &&
                 (t.AssignedUserId == userId ||
                  t.Project.OwnerId == userId));
         }
 
-
         public async Task<List<ProjectTask>> GetAccessibleTasksByProjectAsync(
-           int projectId,
-           int userId)
+            int projectId,
+            int userId)
         {
-            return await context.Tasks
+            return await _context.Tasks
+                .AsNoTracking()
                 .Where(t =>
                     t.ProjectId == projectId &&
                     (t.AssignedUserId == userId ||
                      t.Project.OwnerId == userId))
+                .OrderBy(t => t.Id)
                 .ToListAsync();
         }
 
         public async Task<List<ProjectTask>> GetAccessibleTasksByStatusAsync(
-             ProjectTaskStatus status,
-             int userId)
+            ProjectTaskStatus status,
+            int userId)
         {
-            return await context.Tasks
+            return await _context.Tasks
+                .AsNoTracking()
                 .Where(t =>
                     t.Status == status &&
                     (t.AssignedUserId == userId ||
                      t.Project.OwnerId == userId))
+                .OrderBy(t => t.Id)
                 .ToListAsync();
         }
 
         public async Task<List<ProjectTask>> GetAccessibleTasksAsync(int userId)
         {
-            return await context.Tasks
+            return await _context.Tasks
+                .AsNoTracking()
                 .Where(t =>
                     t.AssignedUserId == userId ||
                     t.Project.OwnerId == userId)
+                .OrderBy(t => t.Id)
                 .ToListAsync();
+        }
+
+        public async Task<PagedResultDto<TaskResponseDto>> GetPagedAsync(
+            int pageNumber,
+            int pageSize)
+        {
+            var query = _context.Tasks.AsNoTracking();
+
+            var totalCount = await query.CountAsync();
+
+            var items = await query
+                .OrderBy(t => t.Id)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ProjectTo<TaskResponseDto>(_mapperConfig)
+                .ToListAsync();
+
+            return new PagedResultDto<TaskResponseDto>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
         }
     }
 }

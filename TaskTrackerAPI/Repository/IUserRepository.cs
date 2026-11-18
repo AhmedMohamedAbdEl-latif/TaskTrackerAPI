@@ -1,14 +1,41 @@
-﻿namespace TaskTrackerAPI.Repository
+﻿
+namespace TaskTrackerAPI.Repository
 {
     public interface IUserRepository
     {
-        Task<List<User>> ListAllAsync();
-        Task<User?> FindByIDAsync(int id);
-        Task<User?> FindByEmailAsync(string email);
-        Task<bool> ExistsAsync(int id);
-        Task<List<UserResponseDto>> GetAllProjectedAsync();
+        Task<List<User>> ListAllAsync(
+            CancellationToken cancellationToken = default);
+
+        Task<User?> FindByIDAsync(
+            int id,
+            CancellationToken cancellationToken = default);
+
+        Task<User?> FindByEmailAsync(
+            string email,
+            CancellationToken cancellationToken = default);
+
+        Task<bool> ExistsAsync(
+            int id,
+            CancellationToken cancellationToken = default);
+
+        Task<List<UserResponseDto>> GetAllProjectedAsync(
+            CancellationToken cancellationToken = default);
+
+        Task<bool> HasAssignedTasksAsync(
+            int userId,
+            CancellationToken cancellationToken = default);
+
+        Task<bool> HasCommentsAsync(
+            int userId,
+            CancellationToken cancellationToken = default);
+
+        Task<int> CountAdminAsync(
+            CancellationToken cancellationToken = default);
+
         void Update(User user);
-        void Delete(int id);
+
+        void Delete(User user);
+
         void Create(User user);
     }
 }

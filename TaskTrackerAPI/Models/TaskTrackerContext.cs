@@ -3,12 +3,14 @@
 
 namespace TaskTrackerAPI.Models
 {
-    public class TaskTrackerContext: DbContext
+    public class TaskTrackerContext : DbContext
     {
         public DbSet<User> Users { get; set; }
         public DbSet<Project> Projects { get; set; }
         public DbSet<ProjectTask> Tasks { get; set; }
         public DbSet<Comment> Comments { get; set; }
+        public DbSet<LoginAttempt> LoginAttempts { get; set; }
+        public DbSet<LoginAttemptOperation> LoginAttemptOperations { get; set; }
         public TaskTrackerContext(DbContextOptions<TaskTrackerContext> options) : base(options)
         {
         }
@@ -33,6 +35,27 @@ namespace TaskTrackerAPI.Models
                 .WithMany()
                 .HasForeignKey(p => p.OwnerId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.Email)
+                .IsUnique();
+
+            modelBuilder.Entity<LoginAttempt>()
+                .HasIndex(la => la.EmailHash)
+                .IsUnique();
+
+            modelBuilder.Entity<Comment>()
+                .HasOne(c => c.Task)
+                .WithMany()
+                .HasForeignKey(c => c.TaskId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Comment>()
+              .HasOne(c => c.User)
+              .WithMany()
+              .HasForeignKey(c => c.UserId)
+              .OnDelete(DeleteBehavior.Restrict);
+
         }
     }
 }

@@ -39,6 +39,21 @@ namespace TaskTrackerAPI.Controllers
         [HttpGet("{Id}")]
         public async Task<IActionResult> FindByID(int Id)
         {
+            if (Id <= 0)
+            {
+                var validationResult = new ServiceResult
+                {
+                    Success = false,
+                    ErrorType = ServiceErrorType.Validation,
+                    Errors = new List<string>
+                      {
+                          "Invalid Comment ID."
+                      }
+                };
+
+                return HandleError(validationResult);
+            }
+
             var result = await commentService.GetByIdAsync(Id);
 
             if (!result.Success)
@@ -52,6 +67,21 @@ namespace TaskTrackerAPI.Controllers
         [HttpGet("task/{taskId}")]
         public async Task<IActionResult> GetCommentsByTaskId(int taskId)
         {
+            if (taskId <= 0)
+            {
+                var validationResult = new ServiceResult
+                {
+                    Success = false,
+                    ErrorType = ServiceErrorType.Validation,
+                    Errors = new List<string>
+                      {
+                          "Invalid Task ID."
+                      }
+                };
+
+                return HandleError(validationResult);
+            }
+
             var result = await commentService.GetByTaskIdAsync(taskId);
 
             if (!result.Success)
@@ -65,6 +95,21 @@ namespace TaskTrackerAPI.Controllers
         [HttpPut("{Id}")]
         public async Task<IActionResult> Update(int Id, UpdateCommentDto commentDto)
         {
+            if (Id <= 0)
+            {
+                var validationResult = new ServiceResult
+                {
+                    Success = false,
+                    ErrorType = ServiceErrorType.Validation,
+                    Errors = new List<string>
+                      {
+                          "Invalid Comment ID."
+                      }
+                };
+
+                return HandleError(validationResult);
+            }
+
             var result = await commentService.UpdateAsync(Id, commentDto);
 
             if (!result.Success)
@@ -83,7 +128,7 @@ namespace TaskTrackerAPI.Controllers
                 if (!result.Success)
                     return HandleError(result);
 
-                return CreatedAtAction(nameof(FindByID), new {Id = result.Data.Id}, result.Data);
+                return CreatedAtAction(nameof(FindByID), new {Id = result.Data!.Id}, result.Data);
         }
 
         // DELETE: api/comment/{id}
@@ -92,7 +137,19 @@ namespace TaskTrackerAPI.Controllers
         public async Task<IActionResult> Delete(int Id)
         {
             if (Id <= 0)
-                return BadRequest("Invalid Comment ID");
+            {
+                var validationResult = new ServiceResult
+                {
+                    Success = false,
+                    ErrorType = ServiceErrorType.Validation,
+                    Errors = new List<string>
+                      {
+                          "Invalid Comment ID."
+                      }
+                };
+
+                return HandleError(validationResult);
+            }
 
             var result = await commentService.DeleteAsync(Id);
 

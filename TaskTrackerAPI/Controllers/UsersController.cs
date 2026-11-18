@@ -1,6 +1,4 @@
-﻿// GET: api/Users:  Entity-based retrieval followed by mapping in the Service layer.
-// GET: api/Users/projected: Direct DTO projection at the database level using ProjectTo<TDto>().
-
+﻿
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,21 +8,23 @@ namespace TaskTrackerAPI.Controllers
     [ApiController]
     public class UsersController : ApiControllerBase
     {
-        private readonly IUserService userService;
-        private readonly IUnitOfWork unitOfWork;
+        private readonly IUserService _userService;
         private readonly ICurrentUserService _currentUser;
-        public UsersController(IUserService _userService, IUnitOfWork _unitOfWork, ICurrentUserService currentUser)
+
+        public UsersController(
+            IUserService userService,
+            ICurrentUserService currentUser)
         {
-            userService = _userService;
-            unitOfWork = _unitOfWork;
+            _userService = userService;
             _currentUser = currentUser;
         }
+
         // GET: api/users
         [HttpGet]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllUsers()
         {
-            var users = await userService.ListAllAsync();
+            var users = await _userService.ListAllAsync();
 
             return Ok(users);
         }
@@ -34,7 +34,8 @@ namespace TaskTrackerAPI.Controllers
         [HttpGet("projected")]
         public async Task<IActionResult> GetAllProjected()
         {
-            var users = await userService.GetAllProjectedAsync();
+            var users = await _userService.GetAllProjectedAsync();
+
             return Ok(users);
         }
 
@@ -44,63 +45,80 @@ namespace TaskTrackerAPI.Controllers
         public async Task<IActionResult> FindByID(int id)
         {
             if (!_currentUser.IsAdmin && _currentUser.UserId != id)
-                return Forbid();
+                return ForbiddenError();
 
-            var user = await userService.FindByIDAsync(id);
+            var user = await _userService.FindByIDAsync(id);
 
             if (user == null)
                 return NotFound();
 
             return Ok(user);
         }
-        // POST: api/users
-        //[HttpPost]
-        //public async Task<IActionResult> Create(UserDto userDto)
-        //{
-        //    
-        //       var result = await userService.CreateAsync(userDto);
-
-        //        if (!result.Success)
-        //            return HandleError(result);
-
-        //        await unitOfWork.SaveChangesAsync();
-
-        //        return CreatedAtAction(nameof(FindByID), new { Id = result.Data.Id }, result.Data);
-        // }
-
 
         // PUT: api/users/{id}
         [Authorize]
         [HttpPut("{id}")]
-        public async Task<IActionResult> Update(int id, UserDto userDto)
+        public async Task<IActionResult> Update(
+            int id,
+            UserDto userDto,
+            CancellationToken cancellationToken)
         {
             if (!_currentUser.IsAdmin && _currentUser.UserId != id)
-                return Forbid();
+                return ForbiddenError();
 
-            var result = await userService.UpdateAsync(id, userDto);
-
-                if(!result.Success)
-                    return HandleError(result);
-
-                await unitOfWork.SaveChangesAsync();
-
-            return NoContent();
-            
-        }
-        // DELETE: api/users/{id}
-        [Authorize(Roles = "Admin")]
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(int id)
-        {
-            if (id <= 0)
-                return BadRequest("Invalid user ID");
-
-            var result = await userService.DeleteAsync(id);
+            var result = await _userService.UpdateAsync(
+                id, userDto, cancellationToken);
 
             if (!result.Success)
                 return HandleError(result);
 
-            await unitOfWork.SaveChangesAsync();
+            return NoContent();
+        }
+
+        // PATCH: api/users/{id}/role
+        [Authorize(Roles = "Admin")]
+        [HttpPatch("{id}/role")]
+        public async Task<IActionResult> UpdateRole(
+            int id,
+            UpdateUserRoleDto roleDto,
+            CancellationToken cancellationToken)
+        {
+            var result = await _userService.UpdateRoleAsync(
+                id, roleDto, cancellationToken);
+
+            if (!result.Success)
+                return HandleError(result);
+
+            return NoContent();
+        }
+
+        // DELETE: api/users/{id}
+        [Authorize(Roles = "Admin")]
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(
+            int id,
+            CancellationToken cancellationToken)
+        {
+            if (id <= 0)
+            {
+                var validationResult = new ServiceResult
+                {
+                    Success = false,
+                    ErrorType = ServiceErrorType.Validation,
+                    Errors = new List<string>
+                    {
+                        "Invalid user ID"
+                    }
+                };
+
+                return HandleError(validationResult);
+            }
+
+            var result = await _userService.DeleteAsync(
+                id, cancellationToken);
+
+            if (!result.Success)
+                return HandleError(result);
 
             return NoContent();
         }

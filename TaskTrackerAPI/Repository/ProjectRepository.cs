@@ -1,98 +1,118 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿
+using Microsoft.EntityFrameworkCore;
 using AutoMapper.QueryableExtensions;
 
 namespace TaskTrackerAPI.Repository
 {
     public class ProjectRepository : IProjectRepository
     {
-        private readonly TaskTrackerContext context;
+        private readonly TaskTrackerContext _context;
         private readonly AutoMapper.IConfigurationProvider _mapperConfig;
 
-        public ProjectRepository(TaskTrackerContext _context, AutoMapper.IConfigurationProvider mapperConfig)
+        public ProjectRepository(
+            TaskTrackerContext context,
+            AutoMapper.IConfigurationProvider mapperConfig)
         {
-            context = _context;
+            _context = context;
             _mapperConfig = mapperConfig;
         }
 
-        public async Task<bool> HasTasksAsync(int projectId)
+        public async Task<bool> HasTasksAsync(
+            int projectId,
+            CancellationToken cancellationToken = default)
         {
-            return await context.Tasks.AnyAsync(t => t.ProjectId == projectId);
+            return await _context.Tasks.AnyAsync(
+                t => t.ProjectId == projectId,
+                cancellationToken);
         }
-        public async Task<bool> HasProjectsAsync(int userId)
+
+        public async Task<bool> HasProjectsAsync(
+            int userId,
+            CancellationToken cancellationToken = default)
         {
-            return await context.Projects.AnyAsync(p => p.OwnerId == userId);
+            return await _context.Projects.AnyAsync(
+                p => p.OwnerId == userId,
+                cancellationToken);
         }
 
         public void Create(Project project)
         {
-           context.Projects.Add(project);
+            _context.Projects.Add(project);
         }
 
-        public void Delete(int id)
+        public void Delete(Project project)
         {
-            var project = context.Projects.FirstOrDefault(p => p.Id == id);
-            if (project != null)
-            {
-                context.Projects.Remove(project);
-            }
+            _context.Projects.Remove(project);
         }
 
-        public async Task<bool> ExistsAsync(int id)
+        public async Task<bool> ExistsAsync(
+            int id,
+            CancellationToken cancellationToken = default)
         {
-            return await context.Projects.AnyAsync(p => p.Id == id);
-        }
-
-        public async Task<Project> FindByIDAsync(int id)
-        {
-            return await context.Projects.Include(p => p.Owner).FirstOrDefaultAsync(p => p.Id == id);
-        }
-
-        // Retrieves all entities from the database and maps them to DTOs in the Service layer using AutoMapper.
-        public async Task<List<Project>> GetAllAsync()
-        {
-           return await context.Projects
-                //.Include(p => p.Owner)
-                .ToListAsync();
+            return await _context.Projects.AnyAsync(
+                p => p.Id == id,
+                cancellationToken);
         }
 
         public void Update(Project project)
         {
-            context.Projects.Update(project);
+            _context.Projects.Update(project);
         }
 
-        // Retrieves data using AutoMapper's ProjectTo<TDto>() to project directly at the database level.
-        public async Task<List<ProjectResponseDto>> GetAllProjectedAsync()
+        // Checks whether the user has a task assigned within the specified project.
+        public async Task<bool> HasTaskAssignedToUserAsync(
+            int projectId,
+            int userId,
+            CancellationToken cancellationToken = default)
         {
-            return await context.Projects
-                //.Select(project => new ProjectResponseDto 
-                //   {
-                //    Id = project.Id,
-                //    Name = project.Name,
-                //    OwnerId = project.OwnerId,
+            return await _context.Tasks.AnyAsync(
+                t => t.ProjectId == projectId &&
+                     t.AssignedUserId == userId,
+                cancellationToken);
+        }
 
-                //})
+
+        public async Task<Project?> FindByIDAsync(
+              int id,
+              CancellationToken cancellationToken = default)
+        {
+            return await _context.Projects
+                .FirstOrDefaultAsync(
+                    p => p.Id == id,
+                    cancellationToken);
+        }
+
+        public async Task<List<Project>> GetAllAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Projects
+                .AsNoTracking()
+                .OrderBy(p => p.Id)
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<List<ProjectResponseDto>> GetAllProjectedAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Projects
+                .OrderBy(p => p.Id)
                 .ProjectTo<ProjectResponseDto>(_mapperConfig)
-                .ToListAsync();
-
+                .ToListAsync(cancellationToken);
         }
-        // This method retrieves all projects that are either owned by the specified user or have tasks assigned to that user.
-        public async Task<List<Project>> GetAccessibleProjectsAsync(int userId)
+
+        public async Task<List<Project>> GetAccessibleProjectsAsync(
+            int userId,
+            CancellationToken cancellationToken = default)
         {
-            return await context.Projects
+            return await _context.Projects
+                .AsNoTracking()
                 .Where(p =>
                     p.OwnerId == userId ||
-                    context.Tasks.Any(t =>
+                    _context.Tasks.Any(t =>
                         t.ProjectId == p.Id &&
                         t.AssignedUserId == userId))
-                .ToListAsync();
-        }
-        // This method checks if a specific user has any tasks assigned within a given project.
-        public async Task<bool> HasTaskAssignedToUserAsync(
-              int projectId, int userId)
-        {
-            return await context.Tasks.AnyAsync(t =>
-                t.ProjectId == projectId &&
-                t.AssignedUserId == userId);
+                .OrderBy(p => p.Id)
+                .ToListAsync(cancellationToken);
         }
     }
 }

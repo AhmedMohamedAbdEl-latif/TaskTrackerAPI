@@ -18,7 +18,18 @@ namespace TaskTrackerAPI.Services.Auth
             var key = _configuration["JWT:SecretKey"];
             var issuerIP = _configuration["JWT:IssuerIP"];
             var audienceIP = _configuration["JWT:AudienceIP"];
-            var duration = int.Parse(_configuration["JWT:DurationInMinutes"]!);
+
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new InvalidOperationException("JWT:SecretKey is missing.");
+            }
+
+            var durationValue = _configuration["JWT:DurationInMinutes"];
+
+            if (!int.TryParse(durationValue, out var duration) || duration <= 0)
+            {
+                throw new InvalidOperationException("Jwt:DurationInMinutes must be a valid positive integer.");
+            }
 
             var claims = new List<Claim>
             {

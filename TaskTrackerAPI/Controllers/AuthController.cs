@@ -1,6 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using TaskTrackerAPI.DTO.Auth;
 using TaskTrackerAPI.Services.Auth;
 
@@ -8,47 +7,41 @@ namespace TaskTrackerAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    
+
     public class AuthController : ApiControllerBase
     {
         private readonly IAuthService _authService;
-        private readonly IUnitOfWork _unitOfWork;
-
-        public AuthController(IAuthService authService, IUnitOfWork unitOfWork)
+        public AuthController(IAuthService authService)
         {
             _authService = authService;
-            _unitOfWork = unitOfWork;
         }
 
+        [EnableRateLimiting("AuthPolicy")]
         [HttpPost("register")]
-        public async Task<IActionResult> Register(RegisterDto registerDto)
+        public async Task<IActionResult> Register(
+            RegisterDto registerDto,
+            CancellationToken cancellationToken)
         {
-            var result = await _authService.RegisterAsync(registerDto);
+            var result = await _authService.RegisterAsync(
+                 registerDto,
+                 cancellationToken);
 
             if (!result.Success)
                 return HandleError(result);
 
-            await _unitOfWork.SaveChangesAsync();
-
             return Ok(result);
         }
 
+        [EnableRateLimiting("AuthPolicy")]
         [HttpPost("login")]
-        public async Task<IActionResult> Login(LoginDto loginDto)
+        public async Task<IActionResult> Login(LoginDto loginDto, CancellationToken cancellationToken)
         {
-            var result = await _authService.LoginAsync(loginDto);
+            var result = await _authService.LoginAsync(loginDto, cancellationToken);
 
             if (!result.Success)
                 return HandleError(result);
 
             return Ok(result);
-        }
-
-        [Authorize(Roles = "Admin")]
-        [HttpGet("admin-test")]
-        public IActionResult AdminTest()
-        {
-            return Ok("You are an Admin");
         }
     }
 }

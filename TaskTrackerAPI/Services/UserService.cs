@@ -1,4 +1,5 @@
-﻿namespace TaskTrackerAPI.Services
+﻿
+namespace TaskTrackerAPI.Services
 {
     public class UserService : IUserService
     {
@@ -6,73 +7,95 @@
         private readonly ICurrentUserService _currentUser;
         private readonly IProjectRepository _projectRepository;
         private readonly IMapper _mapper;
-        public UserService
-            (IUserRepository userRepository, 
+        private readonly IUnitOfWork _unitOfWork;
+
+        public UserService(
+            IUserRepository userRepository,
             ICurrentUserService currentUser,
             IProjectRepository projectRepository,
-            IMapper mapper)
+            IMapper mapper,
+            IUnitOfWork unitOfWork)
         {
             _userRepository = userRepository;
             _currentUser = currentUser;
             _projectRepository = projectRepository;
             _mapper = mapper;
+            _unitOfWork = unitOfWork;
         }
 
-        public Task<ServiceResult<UserResponseDto>> CreateAsync(UserDto userDto)
+        public async Task<ServiceResult> DeleteAsync(
+            int id,
+            CancellationToken cancellationToken = default)
         {
-            var validationResult = new ServiceResult<UserResponseDto>();
+            var validationResult = new ServiceResult();
 
-            var user = new User
-            {
-                Name = userDto.Name,
-                Email = userDto.Email,
-                Role = userDto.Role,
-            };
-
-            _userRepository.Create(user);
-
-            validationResult.Success = true;
-            validationResult.Data = _mapper.Map<UserResponseDto>(user);
-
-            return Task.FromResult(validationResult);
-
-        }
-
-        public async Task<ServiceResult> DeleteAsync(int id)
-        {
-            var result = new ServiceResult();
-
-            var user = await _userRepository.FindByIDAsync(id);
+            var user = await _userRepository.FindByIDAsync(
+                id, cancellationToken);
 
             if (user == null)
             {
-                result.ErrorType = ServiceErrorType.NotFound;
-                result.Errors.Add("User not found.");
-                return result;
+                validationResult.ErrorType = ServiceErrorType.NotFound;
+                validationResult.Errors.Add("User not found.");
+                return validationResult;
             }
 
-            var hasProjects = await _projectRepository.HasProjectsAsync(id);
+            if (user.Role == "Admin")
+            {
+                var adminCount = await _userRepository.CountAdminAsync(
+                    cancellationToken);
+
+                if (adminCount <= 1)
+                {
+                    validationResult.ErrorType = ServiceErrorType.Conflict;
+                    validationResult.Errors.Add(
+                        "Cannot delete the last admin account.");
+
+                    return validationResult;
+                }
+            }
+
+            var hasProjects = await _projectRepository.HasProjectsAsync(
+                id, cancellationToken);
 
             if (hasProjects)
             {
-                result.ErrorType = ServiceErrorType.Conflict;
-                result.Errors.Add(
-                    "Cannot delete this user because they own one or more projects."
-                );
-                return result;
+                validationResult.ErrorType = ServiceErrorType.Conflict;
+                validationResult.Errors.Add(
+                    "Cannot delete this user because they own one or more projects.");
+
+                return validationResult;
             }
 
-            _userRepository.Delete(id);
+            var hasAssignedTasks = await _userRepository.HasAssignedTasksAsync(
+                id, cancellationToken);
 
-            result.Success = true;
-            return result;
+            var hasComments = await _userRepository.HasCommentsAsync(
+                id, cancellationToken);
+
+            if (hasAssignedTasks || hasComments)
+            {
+                validationResult.ErrorType = ServiceErrorType.Conflict;
+                validationResult.Errors.Add(
+                    "Cannot delete this user because they have assigned tasks or comments.");
+
+                return validationResult;
+            }
+
+            _userRepository.Delete(user);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            validationResult.Success = true;
+            return validationResult;
         }
 
         public async Task<UserResponseDto?> FindByIDAsync(int id)
         {
             var user = await _userRepository.FindByIDAsync(id);
 
-            return user != null ?_mapper.Map<UserResponseDto>(user) : null;
+            return user != null
+                ? _mapper.Map<UserResponseDto>(user)
+                : null;
         }
 
         public async Task<List<UserResponseDto>> ListAllAsync()
@@ -82,32 +105,103 @@
             return _mapper.Map<List<UserResponseDto>>(users);
         }
 
-        public async Task<ServiceResult<UserResponseDto>> UpdateAsync(int id, UserDto userDto)
+        public async Task<ServiceResult<UserResponseDto>> UpdateAsync(
+            int id,
+            UserDto userDto,
+            CancellationToken cancellationToken = default)
         {
-          var validationResult = new ServiceResult<UserResponseDto>();
-            var existingUser = await _userRepository.FindByIDAsync(id);
+            var validationResult = new ServiceResult<UserResponseDto>();
 
-            if(existingUser == null)
+            var user = await _userRepository.FindByIDAsync(
+                id, cancellationToken);
+
+            if (user == null)
             {
                 validationResult.ErrorType = ServiceErrorType.NotFound;
                 validationResult.Errors.Add("User not found.");
                 return validationResult;
             }
-            existingUser.Name = userDto.Name;
-            existingUser.Email = userDto.Email;
 
-            if (_currentUser.IsAdmin)
+            if (string.IsNullOrWhiteSpace(userDto.Email) ||
+                userDto.Email.Any(char.IsWhiteSpace))
             {
-                existingUser.Role = userDto.Role;
+                validationResult.ErrorType = ServiceErrorType.Validation;
+                validationResult.Errors.Add("Email format is invalid.");
+                return validationResult;
             }
 
-            //  _userRepository.Update(existingUser);
+            var normalizedEmail = userDto.Email.Trim().ToLowerInvariant();
+
+            var userWithEmail = await _userRepository.FindByEmailAsync(
+                normalizedEmail, cancellationToken);
+
+            if (userWithEmail != null && userWithEmail.Id != id)
+            {
+                validationResult.ErrorType = ServiceErrorType.Conflict;
+                validationResult.Errors.Add("Email is already registered.");
+                return validationResult;
+            }
+
+            user.Name = userDto.Name.Trim();
+            user.Email = normalizedEmail;
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             validationResult.Success = true;
-            validationResult.Data = _mapper.Map<UserResponseDto>(existingUser);
+            validationResult.Data = _mapper.Map<UserResponseDto>(user);
 
             return validationResult;
+        }
 
+        public async Task<ServiceResult<UserResponseDto>> UpdateRoleAsync(
+            int id,
+            UpdateUserRoleDto roleDto,
+            CancellationToken cancellationToken = default)
+        {
+            var validationResult = new ServiceResult<UserResponseDto>();
+
+            var user = await _userRepository.FindByIDAsync(
+                id, cancellationToken);
+
+            if (user == null)
+            {
+                validationResult.ErrorType = ServiceErrorType.NotFound;
+                validationResult.Errors.Add("User not found.");
+                return validationResult;
+            }
+
+            if (roleDto.Role != "User" && roleDto.Role != "Admin")
+            {
+                validationResult.ErrorType = ServiceErrorType.Validation;
+                validationResult.Errors.Add("Invalid role.");
+                return validationResult;
+            }
+
+            var newRole = roleDto.Role;
+
+            if (user.Role == "Admin" && newRole == "User")
+            {
+                var adminCount = await _userRepository.CountAdminAsync(
+                    cancellationToken);
+
+                if (adminCount <= 1)
+                {
+                    validationResult.ErrorType = ServiceErrorType.Conflict;
+                    validationResult.Errors.Add(
+                        "Can't remove the role of the last admin.");
+
+                    return validationResult;
+                }
+            }
+
+            user.Role = newRole;
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            validationResult.Success = true;
+            validationResult.Data = _mapper.Map<UserResponseDto>(user);
+
+            return validationResult;
         }
 
         public async Task<List<UserResponseDto>> GetAllProjectedAsync()
