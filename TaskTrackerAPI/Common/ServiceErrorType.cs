@@ -10,5 +10,7 @@ namespace TaskTrackerAPI.Common
         Unauthorized,
         Forbidden,
         Conflict,
+        TooManyRequests,
+        InternalServerError,
     }
 }

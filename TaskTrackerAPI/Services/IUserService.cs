@@ -3,9 +3,11 @@ namespace TaskTrackerAPI.Services
 {
     public interface IUserService
     {
-        Task<List<UserResponseDto>> ListAllAsync();
+        Task<PagedResultDto<UserResponseDto>> ListAllAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default);
 
-        Task<UserResponseDto?> FindByIDAsync(int id);
+        Task<UserResponseDto?> FindByIDAsync(int id, CancellationToken cancellationToken = default);
 
         Task<ServiceResult<UserResponseDto>> UpdateAsync(
             int id,
@@ -16,7 +18,9 @@ namespace TaskTrackerAPI.Services
             int id,
             CancellationToken cancellationToken = default);
 
-        Task<List<UserResponseDto>> GetAllProjectedAsync();
+        Task<PagedResultDto<UserResponseDto>> GetAllProjectedAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default);
 
         Task<ServiceResult<UserResponseDto>> UpdateRoleAsync(
             int id,

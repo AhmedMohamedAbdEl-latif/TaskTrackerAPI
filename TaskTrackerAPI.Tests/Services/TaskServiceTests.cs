@@ -1,4 +1,3 @@
-﻿using AutoMapper;
 using Moq;
 using TaskTrackerAPI.Common;
 using TaskTrackerAPI.DTO.Pagination;
@@ -42,7 +41,6 @@ namespace TaskTrackerAPI.Tests.Services
             var userRepository = new Mock<IUserRepository>();
             var unitOfWork = new Mock<IUnitOfWork>();
             var currentUser = new Mock<ICurrentUserService>();
-            var mapper = new Mock<IMapper>();
             var comment = new Mock<ICommentRepository>();
 
             currentUser.Setup(c => c.IsAdmin).Returns(false);
@@ -53,7 +51,6 @@ namespace TaskTrackerAPI.Tests.Services
                 userRepository.Object,
                 unitOfWork.Object,
                 currentUser.Object,
-                mapper.Object,
                 comment.Object
                 );
             var pagination = new PaginationQueryDto

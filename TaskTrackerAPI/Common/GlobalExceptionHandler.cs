@@ -1,20 +1,16 @@
-﻿using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.SqlClient;
+
 namespace TaskTrackerAPI.Common
 {
     public class GlobalExceptionHandler : IExceptionHandler
     {
         private readonly ILogger<GlobalExceptionHandler> _logger;
-        private readonly IProblemDetailsService _problemDetailsService;
 
-        public GlobalExceptionHandler(
-            ILogger<GlobalExceptionHandler> logger,
-            IProblemDetailsService problemDetailsService)
+        public GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger)
         {
             _logger = logger;
-            _problemDetailsService = problemDetailsService;
         }
 
         public async ValueTask<bool> TryHandleAsync(
@@ -22,55 +18,68 @@ namespace TaskTrackerAPI.Common
             Exception exception,
             CancellationToken cancellationToken)
         {
-            if (exception is DbUpdateException dpUpdateException
-                && IsDuplicateEmailException(dpUpdateException))
+            // A browser or proxy can cancel a request when its user navigates
+            // away. That is normal request flow, not a server failure.
+            if (exception is OperationCanceledException &&
+                httpContext.RequestAborted.IsCancellationRequested)
             {
-                _logger.LogWarning(dpUpdateException, "Duplicate email detected while saving user.");
-
-                httpContext.Response.StatusCode = StatusCodes.Status409Conflict;
-
-                var conflictProblem = new ProblemDetails
-                {
-                    Status = StatusCodes.Status409Conflict,
-                    Title = "Conflict",
-                    Detail = "This email address already exists."
-                };
-
-                conflictProblem.Extensions["traceId"] = httpContext.TraceIdentifier;
-
-                await _problemDetailsService.WriteAsync(
-                    new ProblemDetailsContext
-                    {
-                        HttpContext = httpContext,
-                        ProblemDetails = conflictProblem
-                    });
-
+                _logger.LogDebug(
+                    "Request was cancelled by the client. TraceId: {TraceId}",
+                    httpContext.TraceIdentifier);
                 return true;
             }
 
-            _logger.LogError(
-                exception,
-                "An unexpected error occurred. TraceId: {TraceId}",
-                httpContext.TraceIdentifier
-                );
-
-            httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
-
-            var problemDetails = new ProblemDetails
+            if (httpContext.Response.HasStarted)
             {
-                Status = StatusCodes.Status500InternalServerError,
-                Title = "Internal server error",
-                Detail = "An unexpected error occurred. Please try again later."
-            };
+                _logger.LogError(
+                    exception,
+                    "An exception occurred after the response started. TraceId: {TraceId}",
+                    httpContext.TraceIdentifier);
+                return false;
+            }
 
-            problemDetails.Extensions["traceId"] = httpContext.TraceIdentifier;
+            var statusCode = StatusCodes.Status500InternalServerError;
+            var errorType = ServiceErrorType.InternalServerError;
+            var message = "An unexpected error occurred. Please try again later.";
 
-            await _problemDetailsService.WriteAsync(
-                new ProblemDetailsContext
+            if (exception is DbUpdateException dbUpdateException &&
+                IsDuplicateEmailException(dbUpdateException))
+            {
+                _logger.LogWarning(
+                    dbUpdateException,
+                    "Duplicate email detected while saving user.");
+                statusCode = StatusCodes.Status409Conflict;
+                errorType = ServiceErrorType.Conflict;
+                message = "This email address already exists.";
+            }
+            else if (exception is DbUpdateException foreignKeyException &&
+                     IsForeignKeyConstraintException(foreignKeyException))
+            {
+                _logger.LogWarning(
+                    foreignKeyException,
+                    "A database relationship prevented the requested change.");
+                statusCode = StatusCodes.Status409Conflict;
+                errorType = ServiceErrorType.Conflict;
+                message = "The operation conflicts with related records. Refresh the data and try again.";
+            }
+            else
+            {
+                _logger.LogError(
+                    exception,
+                    "An unexpected error occurred. TraceId: {TraceId}",
+                    httpContext.TraceIdentifier);
+            }
+
+            httpContext.Response.StatusCode = statusCode;
+            await httpContext.Response.WriteAsJsonAsync(
+                new ServiceResult
                 {
-                    HttpContext = httpContext,
-                    ProblemDetails = problemDetails
-                });
+                    Success = false,
+                    ErrorType = errorType,
+                    Errors = new List<string> { message },
+                    TraceId = httpContext.TraceIdentifier
+                },
+                cancellationToken);
 
             return true;
         }
@@ -83,12 +92,16 @@ namespace TaskTrackerAPI.Common
                 return false;
 
             var isUniqueViolation = sqlException.Number is 2601 or 2627;
-
             var isEmailIndex = sqlException.Message.Contains(
                 "IX_Users_Email",
                 StringComparison.OrdinalIgnoreCase);
 
             return isUniqueViolation && isEmailIndex;
+        }
+
+        public static bool IsForeignKeyConstraintException(DbUpdateException exception)
+        {
+            return exception.GetBaseException() is SqlException { Number: 547 };
         }
     }
 }

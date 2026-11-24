@@ -5,18 +5,30 @@ namespace TaskTrackerAPI.Services
 {
     public interface ITaskService
     {
-        Task<ServiceResult<List<TaskResponseDto>>> ListAllAsync();
-        Task<ServiceResult<TaskResponseDto>> FindByIDAsync(int id);
-        Task<ServiceResult<List<TaskResponseDto>>> GetByProjectID(int projectId);
-        Task<ServiceResult<List<TaskResponseDto>>> GetTasksByUserAsync(int requestedUserId);
-        Task<ServiceResult<List<TaskResponseDto>>> GetByStatus(
-             ProjectTaskStatus status);
-        Task<ServiceResult<TaskResponseDto>> CreateAsync(TaskDto taskDto);
-        Task<ServiceResult> UpdateAsync(int id, TaskDto taskDto);
-        Task<TaskStatsDto> GetStatsAsync();
-        Task<ServiceResult> DeleteAsync(int id);
-        Task<List<TaskResponseDto>> ListAllProjectedAsync();
-        Task<ServiceResult> UpdateStatusAsync(int id, UpdateTaskStatusDto statusDto);
-        Task<ServiceResult<PagedResultDto<TaskResponseDto>>> GetPagedAsync(PaginationQueryDto pagination);
+        Task<ServiceResult<PagedResultDto<TaskResponseDto>>> ListAllAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default);
+        Task<ServiceResult<TaskResponseDto>> FindByIDAsync(int id, CancellationToken cancellationToken = default);
+        Task<ServiceResult<PagedResultDto<TaskResponseDto>>> GetByProjectID(
+            int projectId,
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default);
+        Task<ServiceResult<PagedResultDto<TaskResponseDto>>> GetTasksByUserAsync(
+            int requestedUserId,
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default);
+        Task<ServiceResult<PagedResultDto<TaskResponseDto>>> GetByStatus(
+            ProjectTaskStatus status,
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default);
+        Task<ServiceResult<TaskResponseDto>> CreateAsync(TaskDto taskDto, CancellationToken cancellationToken = default);
+        Task<ServiceResult> UpdateAsync(int id, TaskDto taskDto, CancellationToken cancellationToken = default);
+        Task<TaskStatsDto> GetStatsAsync(CancellationToken cancellationToken = default);
+        Task<ServiceResult> DeleteAsync(int id, CancellationToken cancellationToken = default);
+        Task<PagedResultDto<TaskResponseDto>> ListAllProjectedAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default);
+        Task<ServiceResult> UpdateStatusAsync(int id, UpdateTaskStatusDto statusDto, CancellationToken cancellationToken = default);
+        Task<ServiceResult<PagedResultDto<TaskResponseDto>>> GetPagedAsync(PaginationQueryDto pagination, CancellationToken cancellationToken = default);
     }
 }

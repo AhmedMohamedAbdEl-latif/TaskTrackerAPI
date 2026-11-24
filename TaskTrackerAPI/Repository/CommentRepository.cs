@@ -1,17 +1,15 @@
-﻿using Microsoft.EntityFrameworkCore;
-using AutoMapper.QueryableExtensions;
+using Microsoft.EntityFrameworkCore;
+using TaskTrackerAPI.DTO.Pagination;
 
 namespace TaskTrackerAPI.Repository
 {
     public class CommentRepository : ICommentRepository
     {
         private readonly TaskTrackerContext _context;
-        private readonly AutoMapper.IConfigurationProvider _mapperConfig;
 
-        public CommentRepository(TaskTrackerContext context, AutoMapper.IConfigurationProvider mapperConfig)
+        public CommentRepository(TaskTrackerContext context)
         {
             _context = context;
-            _mapperConfig = mapperConfig;
         }
         public void Create(Comment comment)
         {
@@ -23,34 +21,34 @@ namespace TaskTrackerAPI.Repository
             _context.Comments.Remove(comment);
         }
 
-        public async Task<Comment?> GetByIdAsync(int id)
+        public async Task<Comment?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
         {
            return await _context.Comments
 
-                .FirstOrDefaultAsync(c => c.Id == id);
+                .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
         }
 
-        public async Task<List<Comment>> GetByTaskIdAsync(int taskId)
+        public async Task<List<Comment>> GetByTaskIdAsync(int taskId, CancellationToken cancellationToken = default)
         {
             return await _context.Comments
                 .AsNoTracking()
                 .Where(c => c.TaskId == taskId)
                 .OrderBy(c => c.Id)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
 
-        // Retrieves all entities from the database and maps them to DTOs in the Service layer using AutoMapper.
-        public async Task<List<Comment>> ListAllAsync()
+        // Retrieves entities for mapping in the service layer.
+        public async Task<List<Comment>> ListAllAsync(CancellationToken cancellationToken = default)
         {
             return await _context.Comments
                 .AsNoTracking()
                 .OrderBy(c => c.Id)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
-        public async Task<bool> HasCommentsByTaskIdAsync(int taskId)
+        public async Task<bool> HasCommentsByTaskIdAsync(int taskId, CancellationToken cancellationToken = default)
         {
             return await _context.Comments
-                .AnyAsync(c => c.TaskId == taskId);
+                .AnyAsync(c => c.TaskId == taskId, cancellationToken);
         }
 
         public void Update(Comment comment)
@@ -58,13 +56,42 @@ namespace TaskTrackerAPI.Repository
             _context.Comments.Update(comment);
         }
 
-        // Retrieves data using AutoMapper's ProjectTo<TDto>() to project directly at the database level.
-        public async Task<List<CommentResponseDto>> GetAllProjectedAsync()
+        // Project only the response fields in SQL.
+        public async Task<List<CommentResponseDto>> GetAllProjectedAsync(CancellationToken cancellationToken = default)
         {
             return await _context.Comments
                 .OrderBy(c => c.Id)
-                .ProjectTo<CommentResponseDto>(_mapperConfig)
-                .ToListAsync();
+                .Select(c => new CommentResponseDto
+                {
+                    Id = c.Id,
+                    UserId = c.UserId,
+                    TaskId = c.TaskId,
+                    Content = c.Content,
+                    CreatedAt = c.CreatedAt
+                })
+                .ToListAsync(cancellationToken);
+        }
+
+        public async Task<PagedResultDto<CommentResponseDto>> GetPagedAsync(
+            PaginationQueryDto pagination,
+            int? taskId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var query = _context.Comments.AsNoTracking();
+            if (taskId.HasValue)
+                query = query.Where(comment => comment.TaskId == taskId.Value);
+
+            return await query
+                .OrderBy(comment => comment.Id)
+                .Select(comment => new CommentResponseDto
+                {
+                    Id = comment.Id,
+                    UserId = comment.UserId,
+                    TaskId = comment.TaskId,
+                    Content = comment.Content,
+                    CreatedAt = comment.CreatedAt
+                })
+                .ToPagedResultAsync(pagination, cancellationToken);
         }
     }
 }

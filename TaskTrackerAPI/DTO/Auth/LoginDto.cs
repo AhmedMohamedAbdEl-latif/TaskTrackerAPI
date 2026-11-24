@@ -11,5 +11,9 @@ namespace TaskTrackerAPI.DTO.Auth
         [Required]
         [MaxLength(128)]
         public string Password { get; set; } = string.Empty;
+
+        [MaxLength(32)]
+        [System.ComponentModel.DataAnnotations.RegularExpression("^([0-9]{6}|[A-Fa-f0-9]{32})$")]
+        public string? TwoFactorCode { get; set; }
     }
 }

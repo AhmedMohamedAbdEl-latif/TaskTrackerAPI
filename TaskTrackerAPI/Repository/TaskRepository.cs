@@ -1,4 +1,3 @@
-﻿using AutoMapper.QueryableExtensions;
 using Microsoft.EntityFrameworkCore;
 using TaskTrackerAPI.DTO.Pagination;
 
@@ -7,12 +6,10 @@ namespace TaskTrackerAPI.Repository
     public class TaskRepository : ITaskRepository
     {
         private readonly TaskTrackerContext _context;
-        private readonly AutoMapper.IConfigurationProvider _mapperConfig;
 
-        public TaskRepository(TaskTrackerContext context, AutoMapper.IConfigurationProvider mapperConfig)
+        public TaskRepository(TaskTrackerContext context)
         {
             _context = context;
-            _mapperConfig = mapperConfig;
         }
         public void Create(ProjectTask task)
         {
@@ -23,91 +20,101 @@ namespace TaskTrackerAPI.Repository
             _context.Tasks.Remove(task);
         }
 
-        public async Task<bool> ExistsAsync(int id)
+        public async Task<bool> ExistsAsync(int id, CancellationToken cancellationToken = default)
         {
-            return await _context.Tasks.AnyAsync(t => t.Id == id);
+            return await _context.Tasks.AnyAsync(t => t.Id == id, cancellationToken);
         }
 
-        public async Task<ProjectTask?> FindByIDAsync(int id)
+        public async Task<ProjectTask?> FindByIDAsync(int id, CancellationToken cancellationToken = default)
         {
             return await _context.Tasks
                  .Include(t => t.Project)
-                 .FirstOrDefaultAsync(t => t.Id == id);
+                 .FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
         }
-        public async Task<List<ProjectTask>> GetByProjectIDAsync(int projectId)
+        public async Task<List<ProjectTask>> GetByProjectIDAsync(int projectId, CancellationToken cancellationToken = default)
         {
             return await _context.Tasks
                 .AsNoTracking()
                 .Where(t => t.ProjectId == projectId)
                 .OrderBy(t => t.Id)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
-        public async Task<List<ProjectTask>> GetByStatusAsync(ProjectTaskStatus status)
+        public async Task<List<ProjectTask>> GetByStatusAsync(ProjectTaskStatus status, CancellationToken cancellationToken = default)
         {
             return await _context.Tasks
                 .AsNoTracking()
                 .Where(t => t.Status == status)
                 .OrderBy(t => t.Id)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
 
-        public async Task<List<ProjectTask>> GetByUserIDAsync(int userId)
+        public async Task<List<ProjectTask>> GetByUserIDAsync(int userId, CancellationToken cancellationToken = default)
         {
             return await _context.Tasks
                 .AsNoTracking()
                 .Where(t => t.AssignedUserId == userId)
                 .OrderBy(t => t.Id)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
 
-        public async Task<TaskStatsDto> GetStatsAsync()
+        public async Task<TaskStatsDto> GetStatsAsync(CancellationToken cancellationToken = default)
         {
             var now = DateTime.UtcNow;
 
             return new TaskStatsDto
             {
-                ToDo = await _context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.ToDo),
+                ToDo = await _context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.ToDo, cancellationToken),
 
-                InProgress = await _context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.InProgress),
+                InProgress = await _context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.InProgress, cancellationToken),
 
-                Done = await _context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.Done),
+                Done = await _context.Tasks.CountAsync(t => t.Status == ProjectTaskStatus.Done, cancellationToken),
 
-                OverDue = await _context.Tasks.CountAsync(t => t.DueDate < now && t.Status != ProjectTaskStatus.Done),
+                OverDue = await _context.Tasks.CountAsync(t => t.DueDate < now && t.Status != ProjectTaskStatus.Done, cancellationToken),
 
             };
 
         }
-        public async Task<List<ProjectTask>> ListAllAsync()
+        public async Task<List<ProjectTask>> ListAllAsync(CancellationToken cancellationToken = default)
         {
             return await _context.Tasks
                 .AsNoTracking()
                 .OrderBy(t => t.Id)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
         public void Update(ProjectTask task)
         {
             _context.Tasks.Update(task);
         }
 
-        // Retrieves data using AutoMapper's ProjectTo<TDto>() to project directly at the database level.
-        public async Task<List<TaskResponseDto>> GetAllProjectedAsync()
+        // Project only the response fields in SQL.
+        public async Task<List<TaskResponseDto>> GetAllProjectedAsync(CancellationToken cancellationToken = default)
         {
             return await _context.Tasks
                 .OrderBy(t => t.Id)
-                .ProjectTo<TaskResponseDto>(_mapperConfig)
-                .ToListAsync();
+                .Select(t => new TaskResponseDto
+                {
+                    Id = t.Id,
+                    Title = t.Title,
+                    Description = t.Description,
+                    DueDate = t.DueDate,
+                    Status = t.Status,
+                    ProjectId = t.ProjectId,
+                    AssignedUserId = t.AssignedUserId
+                })
+                .ToListAsync(cancellationToken);
         }
-        public async Task<bool> CanUserAccessTaskAsync(int taskId, int userId)
+        public async Task<bool> CanUserAccessTaskAsync(int taskId, int userId, CancellationToken cancellationToken = default)
         {
             return await _context.Tasks.AnyAsync(t =>
                 t.Id == taskId &&
                 (t.AssignedUserId == userId ||
-                 t.Project.OwnerId == userId));
+                 t.Project.OwnerId == userId), cancellationToken);
         }
 
         public async Task<List<ProjectTask>> GetAccessibleTasksByProjectAsync(
             int projectId,
-            int userId)
+            int userId,
+            CancellationToken cancellationToken = default)
         {
             return await _context.Tasks
                 .AsNoTracking()
@@ -116,12 +123,13 @@ namespace TaskTrackerAPI.Repository
                     (t.AssignedUserId == userId ||
                      t.Project.OwnerId == userId))
                 .OrderBy(t => t.Id)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
 
         public async Task<List<ProjectTask>> GetAccessibleTasksByStatusAsync(
             ProjectTaskStatus status,
-            int userId)
+            int userId,
+            CancellationToken cancellationToken = default)
         {
             return await _context.Tasks
                 .AsNoTracking()
@@ -130,10 +138,10 @@ namespace TaskTrackerAPI.Repository
                     (t.AssignedUserId == userId ||
                      t.Project.OwnerId == userId))
                 .OrderBy(t => t.Id)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
 
-        public async Task<List<ProjectTask>> GetAccessibleTasksAsync(int userId)
+        public async Task<List<ProjectTask>> GetAccessibleTasksAsync(int userId, CancellationToken cancellationToken = default)
         {
             return await _context.Tasks
                 .AsNoTracking()
@@ -141,31 +149,88 @@ namespace TaskTrackerAPI.Repository
                     t.AssignedUserId == userId ||
                     t.Project.OwnerId == userId)
                 .OrderBy(t => t.Id)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
         }
 
         public async Task<PagedResultDto<TaskResponseDto>> GetPagedAsync(
-            int pageNumber,
-            int pageSize)
+            PaginationQueryDto pagination,
+            int? accessibleUserId = null,
+            CancellationToken cancellationToken = default)
         {
             var query = _context.Tasks.AsNoTracking();
-
-            var totalCount = await query.CountAsync();
-
-            var items = await query
-                .OrderBy(t => t.Id)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
-                .ProjectTo<TaskResponseDto>(_mapperConfig)
-                .ToListAsync();
-
-            return new PagedResultDto<TaskResponseDto>
+            if (accessibleUserId.HasValue)
             {
-                Items = items,
-                TotalCount = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize
-            };
+                var userId = accessibleUserId.Value;
+                query = query.Where(t => t.AssignedUserId == userId ||
+                    t.Project.OwnerId == userId);
+            }
+
+            return await ProjectResponse(query.OrderBy(t => t.Id))
+                .ToPagedResultAsync(pagination, cancellationToken);
+        }
+
+        public async Task<PagedResultDto<TaskResponseDto>> GetPagedByProjectAsync(
+            int projectId,
+            PaginationQueryDto pagination,
+            int? accessibleUserId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var query = _context.Tasks.AsNoTracking()
+                .Where(t => t.ProjectId == projectId);
+            if (accessibleUserId.HasValue)
+            {
+                var userId = accessibleUserId.Value;
+                query = query.Where(t => t.AssignedUserId == userId ||
+                    t.Project.OwnerId == userId);
+            }
+
+            return await ProjectResponse(query.OrderBy(t => t.Id))
+                .ToPagedResultAsync(pagination, cancellationToken);
+        }
+
+        public async Task<PagedResultDto<TaskResponseDto>> GetPagedByStatusAsync(
+            ProjectTaskStatus status,
+            PaginationQueryDto pagination,
+            int? accessibleUserId = null,
+            CancellationToken cancellationToken = default)
+        {
+            var query = _context.Tasks.AsNoTracking()
+                .Where(t => t.Status == status);
+            if (accessibleUserId.HasValue)
+            {
+                var userId = accessibleUserId.Value;
+                query = query.Where(t => t.AssignedUserId == userId ||
+                    t.Project.OwnerId == userId);
+            }
+
+            return await ProjectResponse(query.OrderBy(t => t.Id))
+                .ToPagedResultAsync(pagination, cancellationToken);
+        }
+
+        public async Task<PagedResultDto<TaskResponseDto>> GetPagedByUserAsync(
+            int userId,
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default)
+        {
+            return await ProjectResponse(_context.Tasks.AsNoTracking()
+                    .Where(t => t.AssignedUserId == userId)
+                    .OrderBy(t => t.Id))
+                .ToPagedResultAsync(pagination, cancellationToken);
+        }
+
+        private static IQueryable<TaskResponseDto> ProjectResponse(
+            IQueryable<ProjectTask> query)
+        {
+            return query.Select(t => new TaskResponseDto
+            {
+                Id = t.Id,
+                Title = t.Title,
+                Description = t.Description,
+                DueDate = t.DueDate,
+                Status = t.Status,
+                ProjectId = t.ProjectId,
+                AssignedUserId = t.AssignedUserId
+            });
         }
     }
 }

@@ -14,8 +14,8 @@ namespace TaskTrackerAPI.Extensions
                 swagger.SwaggerDoc("v1", new OpenApiInfo
                 {
                     Version = "v1",
-                    Title = "ASP.NET Web API",
-                    Description = "WebAPIFirstProject"
+                    Title = "Task Tracker API",
+                    Description = "Task and project management API. Success and error bodies use a consistent envelope; collection endpoints support pagination."
                 });
 
                 swagger.AddSecurityDefinition("Bearer",
@@ -30,12 +30,7 @@ namespace TaskTrackerAPI.Extensions
                             "Enter 'Bearer' [space] and then your valid token"
                     });
 
-                swagger.AddSecurityRequirement(document =>
-                    new OpenApiSecurityRequirement
-                    {
-                        [new OpenApiSecuritySchemeReference(
-                            "Bearer", document)] = []
-                    });
+                swagger.OperationFilter<AuthorizeOperationFilter>();
             });
 
             return services;

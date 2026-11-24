@@ -1,20 +1,18 @@
-﻿
+
 using Microsoft.EntityFrameworkCore;
-using AutoMapper.QueryableExtensions;
+using TaskTrackerAPI.DTO.Pagination;
 
 namespace TaskTrackerAPI.Repository
 {
     public class ProjectRepository : IProjectRepository
     {
         private readonly TaskTrackerContext _context;
-        private readonly AutoMapper.IConfigurationProvider _mapperConfig;
 
         public ProjectRepository(
-            TaskTrackerContext context,
-            AutoMapper.IConfigurationProvider mapperConfig)
+            TaskTrackerContext context
+)
         {
             _context = context;
-            _mapperConfig = mapperConfig;
         }
 
         public async Task<bool> HasTasksAsync(
@@ -96,8 +94,48 @@ namespace TaskTrackerAPI.Repository
         {
             return await _context.Projects
                 .OrderBy(p => p.Id)
-                .ProjectTo<ProjectResponseDto>(_mapperConfig)
+                .Select(p => new ProjectResponseDto
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    OwnerId = p.OwnerId
+                })
                 .ToListAsync(cancellationToken);
+        }
+
+        public async Task<PagedResultDto<ProjectResponseDto>> GetPagedAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Projects
+                .AsNoTracking()
+                .OrderBy(p => p.Id)
+                .Select(p => new ProjectResponseDto
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    OwnerId = p.OwnerId
+                })
+                .ToPagedResultAsync(pagination, cancellationToken);
+        }
+
+        public async Task<PagedResultDto<ProjectResponseDto>> GetAccessiblePagedAsync(
+            int userId,
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default)
+        {
+            return await _context.Projects
+                .AsNoTracking()
+                .Where(p => p.OwnerId == userId || _context.Tasks.Any(t =>
+                    t.ProjectId == p.Id && t.AssignedUserId == userId))
+                .OrderBy(p => p.Id)
+                .Select(p => new ProjectResponseDto
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    OwnerId = p.OwnerId
+                })
+                .ToPagedResultAsync(pagination, cancellationToken);
         }
 
         public async Task<List<Project>> GetAccessibleProjectsAsync(

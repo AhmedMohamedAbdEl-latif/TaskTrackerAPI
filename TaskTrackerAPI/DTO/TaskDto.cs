@@ -17,6 +17,7 @@ namespace TaskTrackerAPI.DTO
         public string Description { get; set; } = string.Empty;
 
         [Required]
+        [System.Text.Json.Serialization.JsonConverter(typeof(NullableUtcDateTimeJsonConverter))]
         public DateTime? DueDate { get; set; }
 
         [Required(ErrorMessage = "Status is required.")]

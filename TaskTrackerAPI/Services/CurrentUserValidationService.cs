@@ -13,7 +13,9 @@ namespace TaskTrackerAPI.Services
             _context = context;
         }
 
-        public async Task<bool> ValidateAsync(ClaimsPrincipal principal)
+        public async Task<bool> ValidateAsync(
+            ClaimsPrincipal principal,
+            CancellationToken cancellationToken = default)
         {
             var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier);
 
@@ -25,19 +27,14 @@ namespace TaskTrackerAPI.Services
 
             var user = await _context.Users
                 .AsNoTracking()
-                .FirstOrDefaultAsync(u => u.Id == userId);
+                .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
 
             if (user == null)
             {
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(user.Role))
-            {
-                return false;
-            }
-
-            if (user.Role != "User" && user.Role != "Admin")
+            if (!Enum.IsDefined(user.Role))
             {
                 return false;
             }
@@ -56,7 +53,7 @@ namespace TaskTrackerAPI.Services
                 identity.RemoveClaim(claim);
             }
 
-            identity.AddClaim(new Claim(ClaimTypes.Role, user.Role));
+            identity.AddClaim(new Claim(ClaimTypes.Role, user.Role.ToString()));
 
             return true;
         }

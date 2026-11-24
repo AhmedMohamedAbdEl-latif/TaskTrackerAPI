@@ -1,4 +1,4 @@
-﻿
+
 
 using TaskTrackerAPI.DTO.Pagination;
 
@@ -10,7 +10,6 @@ namespace TaskTrackerAPI.Services
         private readonly ITaskRepository _taskRepository;
         private readonly IProjectRepository _projectRepository;
         private readonly IUserRepository _userRepository;
-        private readonly IMapper _mapper;
         private readonly ICurrentUserService _currentUser;
         private readonly IUnitOfWork _unitOfWork;
         private readonly ICommentRepository _commentRepository;
@@ -22,7 +21,6 @@ namespace TaskTrackerAPI.Services
             IUserRepository userRepository,
             IUnitOfWork unitOfWork,
             ICurrentUserService currentUser,
-            IMapper mapper,
             ICommentRepository commentRepository
             )
         {
@@ -31,11 +29,10 @@ namespace TaskTrackerAPI.Services
             _projectRepository = projectRepository;
             _userRepository = userRepository;
             _currentUser = currentUser;
-            _mapper = mapper;
             _commentRepository = commentRepository;
         }
         // Create a new task
-        public async Task<ServiceResult<TaskResponseDto>> CreateAsync(TaskDto taskDto)
+        public async Task<ServiceResult<TaskResponseDto>> CreateAsync(TaskDto taskDto, CancellationToken cancellationToken = default)
         {
             var validationResult = new ServiceResult<TaskResponseDto>();
 
@@ -62,7 +59,7 @@ namespace TaskTrackerAPI.Services
                 return validationResult;
             }
 
-            var project = await _projectRepository.FindByIDAsync(taskDto.ProjectId);
+            var project = await _projectRepository.FindByIDAsync(taskDto.ProjectId, cancellationToken);
 
             if (project == null)
             {
@@ -84,7 +81,7 @@ namespace TaskTrackerAPI.Services
                 return validationResult;
             }
 
-            var assignedUserExists = await _userRepository.ExistsAsync(taskDto.AssignedUserId);
+            var assignedUserExists = await _userRepository.ExistsAsync(taskDto.AssignedUserId, cancellationToken);
 
             if (!assignedUserExists)
             {
@@ -114,20 +111,20 @@ namespace TaskTrackerAPI.Services
 
             _taskRepository.Create(task);
 
-            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             validationResult.Success = true;
-            validationResult.Data = _mapper.Map<TaskResponseDto>(task);
+            validationResult.Data = TaskMapper.ToResponseDto(task);
 
             return validationResult;
         }
 
         // Delete a task
-        public async Task<ServiceResult> DeleteAsync(int id)
+        public async Task<ServiceResult> DeleteAsync(int id, CancellationToken cancellationToken = default)
         {
             var validationResult = new ServiceResult();
 
-            var task = await _taskRepository.FindByIDAsync(id);
+            var task = await _taskRepository.FindByIDAsync(id, cancellationToken);
 
             if (task == null)
             {
@@ -161,7 +158,7 @@ namespace TaskTrackerAPI.Services
 
             // Referential integrity: prevent deleting tasks with comments.
             var hasComments =
-                await _commentRepository.HasCommentsByTaskIdAsync(id);
+                await _commentRepository.HasCommentsByTaskIdAsync(id, cancellationToken);
 
             if (hasComments)
             {
@@ -173,18 +170,18 @@ namespace TaskTrackerAPI.Services
 
             _taskRepository.Delete(task);
 
-            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             validationResult.Success = true;
             return validationResult;
         }
 
         // Find a task by ID
-        public async Task<ServiceResult<TaskResponseDto>> FindByIDAsync(int id)
+        public async Task<ServiceResult<TaskResponseDto>> FindByIDAsync(int id, CancellationToken cancellationToken = default)
         {
             var validationResult = new ServiceResult<TaskResponseDto>();
 
-            var task = await _taskRepository.FindByIDAsync(id);
+            var task = await _taskRepository.FindByIDAsync(id, cancellationToken);
 
             if (task == null)
             {
@@ -204,7 +201,8 @@ namespace TaskTrackerAPI.Services
 
                 var canAccess = await _taskRepository.CanUserAccessTaskAsync(
                     id,
-                    _currentUser.UserId.Value);
+                    _currentUser.UserId.Value,
+                    cancellationToken);
 
                 if (!canAccess)
                 {
@@ -215,17 +213,27 @@ namespace TaskTrackerAPI.Services
             }
 
             validationResult.Success = true;
-            validationResult.Data = _mapper.Map<TaskResponseDto>(task);
+            validationResult.Data = TaskMapper.ToResponseDto(task);
 
             return validationResult;
         }
 
         // Get tasks by project ID
-        public async Task<ServiceResult<List<TaskResponseDto>>> GetByProjectID(int projectId)
+        public async Task<ServiceResult<PagedResultDto<TaskResponseDto>>> GetByProjectID(
+            int projectId,
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default)
         {
-            var validationResult = new ServiceResult<List<TaskResponseDto>>();
+            var validationResult = new ServiceResult<PagedResultDto<TaskResponseDto>>();
 
-            var project = await _projectRepository.FindByIDAsync(projectId);
+            if (!pagination.IsValid())
+            {
+                validationResult.ErrorType = ServiceErrorType.Validation;
+                validationResult.Errors.Add("Invalid pagination parameters.");
+                return validationResult;
+            }
+
+            var project = await _projectRepository.FindByIDAsync(projectId, cancellationToken);
 
             if (project == null)
             {
@@ -234,6 +242,7 @@ namespace TaskTrackerAPI.Services
                 return validationResult;
             }
 
+            int? accessibleUserId = null;
             if (!_currentUser.IsAdmin)
             {
                 if (!_currentUser.UserId.HasValue)
@@ -243,39 +252,32 @@ namespace TaskTrackerAPI.Services
                     return validationResult;
                 }
 
-                var userId = _currentUser.UserId.Value;
-
-                var isProjectOwner = project.OwnerId == userId;
-
-                if (isProjectOwner)
-                {
-                    var tasks = await _taskRepository.GetByProjectIDAsync(projectId);
-                    validationResult.Data = _mapper.Map<List<TaskResponseDto>>(tasks);
-                }
-                else
-                {
-                    var tasks = await _taskRepository.GetAccessibleTasksByProjectAsync(
-                        projectId,
-                        userId);
-
-                    validationResult.Data = _mapper.Map<List<TaskResponseDto>>(tasks);
-                }
-            }
-            else
-            {
-                var tasks = await _taskRepository.GetByProjectIDAsync(projectId);
-                validationResult.Data = _mapper.Map<List<TaskResponseDto>>(tasks);
+                accessibleUserId = _currentUser.UserId.Value;
             }
 
+            validationResult.Data = await _taskRepository.GetPagedByProjectAsync(
+                projectId,
+                pagination,
+                accessibleUserId,
+                cancellationToken);
             validationResult.Success = true;
             return validationResult;
         }
 
         // Get tasks by status
-        public async Task<ServiceResult<List<TaskResponseDto>>> GetByStatus(
-              ProjectTaskStatus status)
+        public async Task<ServiceResult<PagedResultDto<TaskResponseDto>>> GetByStatus(
+              ProjectTaskStatus status,
+              PaginationQueryDto pagination,
+              CancellationToken cancellationToken = default)
         {
-            var validationResult = new ServiceResult<List<TaskResponseDto>>();
+            var validationResult = new ServiceResult<PagedResultDto<TaskResponseDto>>();
+
+            if (!pagination.IsValid())
+            {
+                validationResult.ErrorType = ServiceErrorType.Validation;
+                validationResult.Errors.Add("Invalid pagination parameters.");
+                return validationResult;
+            }
 
             if (!Enum.IsDefined(typeof(ProjectTaskStatus), status))
             {
@@ -284,12 +286,8 @@ namespace TaskTrackerAPI.Services
                 return validationResult;
             }
 
-            if (_currentUser.IsAdmin)
-            {
-                var tasks = await _taskRepository.GetByStatusAsync(status);
-                validationResult.Data = _mapper.Map<List<TaskResponseDto>>(tasks);
-            }
-            else
+            int? accessibleUserId = null;
+            if (!_currentUser.IsAdmin)
             {
                 if (!_currentUser.UserId.HasValue)
                 {
@@ -298,22 +296,32 @@ namespace TaskTrackerAPI.Services
                     return validationResult;
                 }
 
-                var tasks = await _taskRepository.GetAccessibleTasksByStatusAsync(
-                    status,
-                    _currentUser.UserId.Value);
-
-                validationResult.Data = _mapper.Map<List<TaskResponseDto>>(tasks);
+                accessibleUserId = _currentUser.UserId.Value;
             }
 
+            validationResult.Data = await _taskRepository.GetPagedByStatusAsync(
+                status,
+                pagination,
+                accessibleUserId,
+                cancellationToken);
             validationResult.Success = true;
             return validationResult;
         }
 
         // Get tasks by user ID
-        public async Task<ServiceResult<List<TaskResponseDto>>> GetTasksByUserAsync(
-            int requestedUserId)
+        public async Task<ServiceResult<PagedResultDto<TaskResponseDto>>> GetTasksByUserAsync(
+            int requestedUserId,
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default)
         {
-            var validationResult = new ServiceResult<List<TaskResponseDto>>();
+            var validationResult = new ServiceResult<PagedResultDto<TaskResponseDto>>();
+
+            if (!pagination.IsValid())
+            {
+                validationResult.ErrorType = ServiceErrorType.Validation;
+                validationResult.Errors.Add("Invalid pagination parameters.");
+                return validationResult;
+            }
 
             if (!_currentUser.IsAuthenticated || !_currentUser.UserId.HasValue)
             {
@@ -330,9 +338,10 @@ namespace TaskTrackerAPI.Services
                 return validationResult;
             }
 
-            var tasks = await _taskRepository.GetByUserIDAsync(requestedUserId);
-
-            validationResult.Data = _mapper.Map<List<TaskResponseDto>>(tasks);
+            validationResult.Data = await _taskRepository.GetPagedByUserAsync(
+                requestedUserId,
+                pagination,
+                cancellationToken);
 
             validationResult.Success = true;
 
@@ -340,21 +349,29 @@ namespace TaskTrackerAPI.Services
         }
 
         // Get task statistics
-        public async Task<TaskStatsDto> GetStatsAsync()
+        public async Task<TaskStatsDto> GetStatsAsync(CancellationToken cancellationToken = default)
         {
-            return await _taskRepository.GetStatsAsync();
+            return await _taskRepository.GetStatsAsync(cancellationToken);
         }
 
         // List all tasks
-        public async Task<ServiceResult<List<TaskResponseDto>>> ListAllAsync()
+        public async Task<ServiceResult<PagedResultDto<TaskResponseDto>>> ListAllAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default)
         {
-            var validationResult = new ServiceResult<List<TaskResponseDto>>();
-
-            List<ProjectTask> tasks;
+            var validationResult = new ServiceResult<PagedResultDto<TaskResponseDto>>();
+            if (!pagination.IsValid())
+            {
+                validationResult.ErrorType = ServiceErrorType.Validation;
+                validationResult.Errors.Add("Invalid pagination parameters.");
+                return validationResult;
+            }
 
             if (_currentUser.IsAdmin)
             {
-                tasks = await _taskRepository.ListAllAsync();
+                validationResult.Data = await _taskRepository.GetPagedAsync(
+                    pagination,
+                    cancellationToken: cancellationToken);
             }
             else
             {
@@ -367,10 +384,12 @@ namespace TaskTrackerAPI.Services
                     return validationResult;
                 }
 
-                tasks = await _taskRepository.GetAccessibleTasksAsync(userId.Value);
+                validationResult.Data = await _taskRepository.GetPagedAsync(
+                    pagination,
+                    userId.Value,
+                    cancellationToken);
             }
 
-            validationResult.Data = _mapper.Map<List<TaskResponseDto>>(tasks);
             validationResult.Success = true;
 
             return validationResult;
@@ -378,11 +397,11 @@ namespace TaskTrackerAPI.Services
 
         // Update a task
 
-        public async Task<ServiceResult> UpdateAsync(int id, TaskDto taskDto)
+        public async Task<ServiceResult> UpdateAsync(int id, TaskDto taskDto, CancellationToken cancellationToken = default)
         {
             var validationResult = new ServiceResult();
 
-            var task = await _taskRepository.FindByIDAsync(id);
+            var task = await _taskRepository.FindByIDAsync(id, cancellationToken);
 
             if (task == null)
             {
@@ -423,7 +442,7 @@ namespace TaskTrackerAPI.Services
             }
 
             var destinationProject =
-                await _projectRepository.FindByIDAsync(taskDto.ProjectId);
+                await _projectRepository.FindByIDAsync(taskDto.ProjectId, cancellationToken);
 
             if (destinationProject == null)
             {
@@ -432,7 +451,7 @@ namespace TaskTrackerAPI.Services
                 return validationResult;
             }
 
-            var userExists = await _userRepository.ExistsAsync(taskDto.AssignedUserId);
+            var userExists = await _userRepository.ExistsAsync(taskDto.AssignedUserId, cancellationToken);
 
             if (!userExists)
             {
@@ -467,23 +486,27 @@ namespace TaskTrackerAPI.Services
             task.ProjectId = taskDto.ProjectId;
             task.AssignedUserId = taskDto.AssignedUserId;
 
-            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             validationResult.Success = true;
             return validationResult;
         }
 
         // List all tasks with projected data
-        public async Task<List<TaskResponseDto>> ListAllProjectedAsync()
+        public async Task<PagedResultDto<TaskResponseDto>> ListAllProjectedAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default)
         {
-            return await _taskRepository.GetAllProjectedAsync();
+            return await _taskRepository.GetPagedAsync(
+                pagination,
+                cancellationToken: cancellationToken);
         }
 
         // Update the status of a task
-        public async Task<ServiceResult> UpdateStatusAsync(int id, UpdateTaskStatusDto statusDto)
+        public async Task<ServiceResult> UpdateStatusAsync(int id, UpdateTaskStatusDto statusDto, CancellationToken cancellationToken = default)
         {
             var validationResult = new ServiceResult();
-            var task = await _taskRepository.FindByIDAsync(id);
+            var task = await _taskRepository.FindByIDAsync(id, cancellationToken);
 
             if (task == null)
             {
@@ -543,7 +566,7 @@ namespace TaskTrackerAPI.Services
 
             task.Status = newStatus;
 
-            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             validationResult.Success = true;
 
@@ -569,7 +592,7 @@ namespace TaskTrackerAPI.Services
 
         }
 
-        public async Task<ServiceResult<PagedResultDto<TaskResponseDto>>> GetPagedAsync(PaginationQueryDto pagination)
+        public async Task<ServiceResult<PagedResultDto<TaskResponseDto>>> GetPagedAsync(PaginationQueryDto pagination, CancellationToken cancellationToken = default)
         {
             var validationResult = new ServiceResult<PagedResultDto<TaskResponseDto>>();
 
@@ -581,10 +604,7 @@ namespace TaskTrackerAPI.Services
                 return validationResult;
             }
 
-            if (pagination.PageNumber < 1 ||
-               pagination.PageSize < 1 ||
-               pagination.PageSize > 100 ||
-               ((long)pagination.PageNumber - 1) * pagination.PageSize > int.MaxValue)
+            if (!pagination.IsValid())
             {
                 validationResult.ErrorType = ServiceErrorType.Validation;
                 validationResult.Errors.Add("Invalid pagination parameters.");
@@ -593,8 +613,8 @@ namespace TaskTrackerAPI.Services
             }
 
             var pagedTasks = await _taskRepository.GetPagedAsync(
-                 pagination.PageNumber,
-                 pagination.PageSize);
+                pagination,
+                cancellationToken: cancellationToken);
 
             validationResult.Success = true;
             validationResult.Data = pagedTasks;

@@ -1,5 +1,6 @@
-﻿// GET: api/projects:  Entity-based retrieval followed by mapping in the Service layer.
-// GET: api/projects/projected: Direct DTO projection at the database level using ProjectTo<TDto>().
+using System.ComponentModel.DataAnnotations;
+// GET: api/projects:  Entity-based retrieval followed by mapping in the Service layer.
+// GET: api/projects/projected: DTO projection directly in the database query.
 
 
 using Microsoft.AspNetCore.Authorization;
@@ -22,28 +23,32 @@ namespace TaskTrackerAPI.Controllers
         // GET: api/projects
         [Authorize]
         [HttpGet]
-        public async Task<IActionResult> GetAllProjects()
+        public async Task<IActionResult> GetAllProjects(
+            [FromQuery] PaginationQueryDto pagination,
+            CancellationToken cancellationToken)
         {
-            var projects = await _projectService.GetAllAsync();
+            var projects = await _projectService.GetAllAsync(pagination, cancellationToken);
 
-            return Ok(projects);
+            return Ok(SuccessResult(projects));
         }
 
         // GET: api/projects/projected
         [Authorize(Roles = "Admin")]
         [HttpGet("projected")]
-        public async Task<IActionResult> GetAllProjected()
+        public async Task<IActionResult> GetAllProjected(
+            [FromQuery] PaginationQueryDto pagination,
+            CancellationToken cancellationToken)
         {
-            var projects = await _projectService.GetAllProjectedAsync();
-            return Ok(projects);
+            var projects = await _projectService.GetAllProjectedAsync(pagination, cancellationToken);
+            return Ok(SuccessResult(projects));
         }
 
         // GET: api/projects/{id}
         [Authorize]
         [HttpPost]
-        public async Task<IActionResult> Create(ProjectDto projectDto)
+        public async Task<IActionResult> Create(ProjectDto projectDto, CancellationToken cancellationToken)
         {
-            var result = await _projectService.CreateAsync(projectDto);
+            var result = await _projectService.CreateAsync(projectDto, cancellationToken);
 
             if (!result.Success)
                 return HandleError(result);
@@ -51,75 +56,49 @@ namespace TaskTrackerAPI.Controllers
             return CreatedAtAction(
                 nameof(FindByID),
                 new { Id = result.Data!.Id },
-                result.Data);
+                result);
 
         }
 
         // GET: api/projects/{id}
         [Authorize]
         [HttpGet("{Id}")]
-        public async Task<IActionResult> FindByID(int Id)
+        public async Task<IActionResult> FindByID([Range(1, int.MaxValue)] int Id, CancellationToken cancellationToken)
         {
-            if (Id <= 0)
-            {
-                var validationResult = new ServiceResult
-                {
-                    Success = false,
-                    ErrorType = ServiceErrorType.Validation,
-                    Errors = new List<string>
-                        {
-                            "Invalid Project ID."
-                        }
-                };
-                return HandleError(validationResult);
-            }
 
-            var project = await _projectService.FindByIDAsync(Id);
+            var project = await _projectService.FindByIDAsync(Id, cancellationToken);
             if (project == null)
-                return NotFound();
+                return NotFoundError("Project not found.");
 
-            return Ok(project);
+            return Ok(SuccessResult(project));
         }
 
         // PUT: api/projects/{id}
         [Authorize]
         [HttpPut("{Id}")]
-        public async Task<IActionResult> Update(int Id, ProjectDto projectDto)
+        public async Task<IActionResult> Update([Range(1, int.MaxValue)] int Id, ProjectDto projectDto, CancellationToken cancellationToken)
         {
-            var result = await _projectService.UpdateAsync(Id, projectDto);
+            var result = await _projectService.UpdateAsync(Id, projectDto, cancellationToken);
 
             if (!result.Success)
                 return HandleError(result);
 
-            return NoContent();
+            return Ok(SuccessResult());
 
         }
 
         // DELETE: api/projects/{id}
         [Authorize]
         [HttpDelete("{Id}")]
-        public async Task<IActionResult> Delete(int Id)
+        public async Task<IActionResult> Delete([Range(1, int.MaxValue)] int Id, CancellationToken cancellationToken)
         {
-            if (Id <= 0)
-            {
-                var validationResult = new ServiceResult
-                {
-                    Success = false,
-                    ErrorType = ServiceErrorType.Validation,
-                    Errors = new List<string>
-                        {
-                            "Invalid Project ID."
-                        }
-                };
-                return HandleError(validationResult);
-            }
 
-            var result = await _projectService.DeleteAsync(Id);
+            var result = await _projectService.DeleteAsync(Id, cancellationToken);
 
             if (!result.Success)
                 return HandleError(result);
 
-            return NoContent();
+            return Ok(SuccessResult());
         }
 
     }

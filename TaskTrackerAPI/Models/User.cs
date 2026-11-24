@@ -14,11 +14,26 @@ namespace TaskTrackerAPI.Models
         [Required]
         public string Email { get; set; } = string.Empty;
 
-        [MaxLength(50)]
-        public string Role { get; set; } = string.Empty;
+        public UserRole Role { get; set; } = UserRole.User;
+
+        public bool TwoFactorEnabled { get; set; }
+
+        [MaxLength(2000)]
+        public string? TwoFactorSecretProtected { get; set; }
+
+        [MaxLength(2000)]
+        public string? TwoFactorRecoveryCodeHashesJson { get; set; }
+
+        public long? TwoFactorLastUsedTimeStep { get; set; }
 
         [MaxLength(255)]
         [Required]
         public string PasswordHash { get; set; } = string.Empty;
+    }
+
+    public enum UserRole
+    {
+        User = 1,
+        Admin = 2
     }
 }

@@ -34,6 +34,6 @@ namespace TaskTrackerAPI.Services
         }
 
         public bool IsAdmin =>
-            User?.IsInRole("Admin") == true;
+            User?.IsInRole(UserRole.Admin.ToString()) == true;
     }
 }

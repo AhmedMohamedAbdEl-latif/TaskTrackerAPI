@@ -1,4 +1,4 @@
-﻿
+
 namespace TaskTrackerAPI.Services
 {
     public class UserService : IUserService
@@ -6,20 +6,17 @@ namespace TaskTrackerAPI.Services
         private readonly IUserRepository _userRepository;
         private readonly ICurrentUserService _currentUser;
         private readonly IProjectRepository _projectRepository;
-        private readonly IMapper _mapper;
         private readonly IUnitOfWork _unitOfWork;
 
         public UserService(
             IUserRepository userRepository,
             ICurrentUserService currentUser,
             IProjectRepository projectRepository,
-            IMapper mapper,
             IUnitOfWork unitOfWork)
         {
             _userRepository = userRepository;
             _currentUser = currentUser;
             _projectRepository = projectRepository;
-            _mapper = mapper;
             _unitOfWork = unitOfWork;
         }
 
@@ -28,6 +25,15 @@ namespace TaskTrackerAPI.Services
             CancellationToken cancellationToken = default)
         {
             var validationResult = new ServiceResult();
+
+            // Serialize admin removals/demotions so two concurrent requests
+            // cannot both observe two admins and remove both.
+            await using var transaction = await _unitOfWork.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable,
+                cancellationToken);
+            await _unitOfWork.AcquireApplicationLockAsync(
+                "AdminMembership",
+                cancellationToken);
 
             var user = await _userRepository.FindByIDAsync(
                 id, cancellationToken);
@@ -39,7 +45,7 @@ namespace TaskTrackerAPI.Services
                 return validationResult;
             }
 
-            if (user.Role == "Admin")
+            if (user.Role == UserRole.Admin)
             {
                 var adminCount = await _userRepository.CountAdminAsync(
                     cancellationToken);
@@ -84,25 +90,26 @@ namespace TaskTrackerAPI.Services
             _userRepository.Delete(user);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             validationResult.Success = true;
             return validationResult;
         }
 
-        public async Task<UserResponseDto?> FindByIDAsync(int id)
+        public async Task<UserResponseDto?> FindByIDAsync(int id, CancellationToken cancellationToken = default)
         {
-            var user = await _userRepository.FindByIDAsync(id);
+            var user = await _userRepository.FindByIDAsync(id, cancellationToken);
 
             return user != null
-                ? _mapper.Map<UserResponseDto>(user)
+                ? UserMapper.ToResponseDto(user)
                 : null;
         }
 
-        public async Task<List<UserResponseDto>> ListAllAsync()
+        public async Task<PagedResultDto<UserResponseDto>> ListAllAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default)
         {
-            var users = await _userRepository.ListAllAsync();
-
-            return _mapper.Map<List<UserResponseDto>>(users);
+            return await _userRepository.GetPagedAsync(pagination, cancellationToken);
         }
 
         public async Task<ServiceResult<UserResponseDto>> UpdateAsync(
@@ -148,7 +155,7 @@ namespace TaskTrackerAPI.Services
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             validationResult.Success = true;
-            validationResult.Data = _mapper.Map<UserResponseDto>(user);
+            validationResult.Data = UserMapper.ToResponseDto(user);
 
             return validationResult;
         }
@@ -160,6 +167,13 @@ namespace TaskTrackerAPI.Services
         {
             var validationResult = new ServiceResult<UserResponseDto>();
 
+            await using var transaction = await _unitOfWork.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable,
+                cancellationToken);
+            await _unitOfWork.AcquireApplicationLockAsync(
+                "AdminMembership",
+                cancellationToken);
+
             var user = await _userRepository.FindByIDAsync(
                 id, cancellationToken);
 
@@ -170,7 +184,7 @@ namespace TaskTrackerAPI.Services
                 return validationResult;
             }
 
-            if (roleDto.Role != "User" && roleDto.Role != "Admin")
+            if (!Enum.IsDefined(roleDto.Role))
             {
                 validationResult.ErrorType = ServiceErrorType.Validation;
                 validationResult.Errors.Add("Invalid role.");
@@ -179,7 +193,7 @@ namespace TaskTrackerAPI.Services
 
             var newRole = roleDto.Role;
 
-            if (user.Role == "Admin" && newRole == "User")
+            if (user.Role == UserRole.Admin && newRole == UserRole.User)
             {
                 var adminCount = await _userRepository.CountAdminAsync(
                     cancellationToken);
@@ -197,16 +211,19 @@ namespace TaskTrackerAPI.Services
             user.Role = newRole;
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             validationResult.Success = true;
-            validationResult.Data = _mapper.Map<UserResponseDto>(user);
+            validationResult.Data = UserMapper.ToResponseDto(user);
 
             return validationResult;
         }
 
-        public async Task<List<UserResponseDto>> GetAllProjectedAsync()
+        public async Task<PagedResultDto<UserResponseDto>> GetAllProjectedAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default)
         {
-            return await _userRepository.GetAllProjectedAsync();
+            return await _userRepository.GetPagedAsync(pagination, cancellationToken);
         }
     }
 }

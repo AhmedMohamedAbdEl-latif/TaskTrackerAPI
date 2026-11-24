@@ -2,19 +2,23 @@
 {
     public interface IProjectService
     {
-        Task<List<ProjectResponseDto>> GetAllAsync();
+        Task<PagedResultDto<ProjectResponseDto>> GetAllAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default);
 
-        Task<ProjectResponseDto?> FindByIDAsync(int id);
+        Task<ProjectResponseDto?> FindByIDAsync(int id, CancellationToken cancellationToken = default);
 
         Task<ServiceResult<ProjectResponseDto>> CreateAsync(
-            ProjectDto projectDto);
+            ProjectDto projectDto, CancellationToken cancellationToken = default);
 
         Task<ServiceResult<ProjectResponseDto>> UpdateAsync(
-            int id, ProjectDto projectDto);
+            int id, ProjectDto projectDto, CancellationToken cancellationToken = default);
 
-        Task<ServiceResult> DeleteAsync(int id);
+        Task<ServiceResult> DeleteAsync(int id, CancellationToken cancellationToken = default);
 
-        Task<List<ProjectResponseDto>> GetAllProjectedAsync();
+        Task<PagedResultDto<ProjectResponseDto>> GetAllProjectedAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default);
     }
 
 }

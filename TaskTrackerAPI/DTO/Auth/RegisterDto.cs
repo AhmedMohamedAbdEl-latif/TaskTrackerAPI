@@ -1,10 +1,12 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
+using TaskTrackerAPI.Validation;
 
 namespace TaskTrackerAPI.DTO.Auth
 {
     public class RegisterDto
     {
         [Required]
+        [NotWhitespace(ErrorMessage = "Name cannot be empty or whitespace.")]
         [MaxLength(70)]
         public string Name { get; set; } = string.Empty;
 

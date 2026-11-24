@@ -1,11 +1,10 @@
-﻿namespace TaskTrackerAPI.Services
+namespace TaskTrackerAPI.Services
 {
     public class ProjectService : IProjectService
     {
         // Dependency injection
         private readonly IProjectRepository _projectRepository;
         private readonly IUserRepository _userRepository;
-        private readonly IMapper _mapper;
         private readonly IUnitOfWork _unitOfWork;
         private readonly ICurrentUserService _currentUserService;
 
@@ -13,18 +12,16 @@
         public ProjectService(
             IProjectRepository projectRepository,
             IUserRepository userRepository,
-            IMapper mapper,
             IUnitOfWork unitOfWork,
             ICurrentUserService currentUserService)
         {
             _projectRepository = projectRepository;
             _userRepository = userRepository;
-            _mapper = mapper;
             _unitOfWork = unitOfWork;
             _currentUserService = currentUserService;
         }
         // Create a new project
-        public async Task<ServiceResult<ProjectResponseDto>> CreateAsync(ProjectDto projectDto)
+        public async Task<ServiceResult<ProjectResponseDto>> CreateAsync(ProjectDto projectDto, CancellationToken cancellationToken = default)
         {
             var validationResult = new ServiceResult<ProjectResponseDto>();
 
@@ -46,7 +43,7 @@
                 return validationResult;
             }
 
-            var owner = await _userRepository.FindByIDAsync(projectDto.OwnerId);
+            var owner = await _userRepository.FindByIDAsync(projectDto.OwnerId, cancellationToken);
 
             // Check if the owner exists
             if (owner == null)
@@ -66,15 +63,15 @@
             // Save the project to the database
             _projectRepository.Create(project);
 
-            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             validationResult.Success = true;
-            validationResult.Data = _mapper.Map<ProjectResponseDto>(project);
+            validationResult.Data = ProjectMapper.ToResponseDto(project);
 
             return validationResult;
         }
         // Delete a project
-        public async Task<ServiceResult> DeleteAsync(int id)
+        public async Task<ServiceResult> DeleteAsync(int id, CancellationToken cancellationToken = default)
         {
             var validationResult = new ServiceResult();
 
@@ -85,7 +82,7 @@
                 return validationResult;
             }
 
-            var project = await _projectRepository.FindByIDAsync(id);
+            var project = await _projectRepository.FindByIDAsync(id, cancellationToken);
 
             if (project == null)
             {
@@ -105,7 +102,7 @@
                 return validationResult;
             }
 
-            var hasTasks = await _projectRepository.HasTasksAsync(id);
+            var hasTasks = await _projectRepository.HasTasksAsync(id, cancellationToken);
 
             if (hasTasks)
             {
@@ -119,7 +116,7 @@
 
             _projectRepository.Delete(project);
 
-            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             validationResult.Success = true;
 
@@ -127,9 +124,9 @@
         }
 
         // Find a project by ID
-        public async Task<ProjectResponseDto?> FindByIDAsync(int id)
+        public async Task<ProjectResponseDto?> FindByIDAsync(int id, CancellationToken cancellationToken = default)
         {
-            var project = await _projectRepository.FindByIDAsync(id);
+            var project = await _projectRepository.FindByIDAsync(id, cancellationToken);
 
             if (project == null)
             {
@@ -138,7 +135,7 @@
 
             if (_currentUserService.IsAdmin)
             {
-                return _mapper.Map<ProjectResponseDto>(project);
+                return ProjectMapper.ToResponseDto(project);
             }
 
             var userId = _currentUserService.UserId;
@@ -151,41 +148,45 @@
             bool isOwner = project.OwnerId == userId.Value;
 
             bool isAssignedUser = await _projectRepository
-                .HasTaskAssignedToUserAsync(project.Id, userId.Value);
+                .HasTaskAssignedToUserAsync(project.Id, userId.Value, cancellationToken);
 
             if (!isOwner && !isAssignedUser)
             {
                 return null;
             }
 
-            return _mapper.Map<ProjectResponseDto>(project);
+            return ProjectMapper.ToResponseDto(project);
         }
 
         // Get all projects
-        public async Task<List<ProjectResponseDto>> GetAllAsync()
+        public async Task<PagedResultDto<ProjectResponseDto>> GetAllAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default)
         {
             if (_currentUserService.IsAdmin)
             {
-                var projects = await _projectRepository.GetAllAsync();
-
-                return _mapper.Map<List<ProjectResponseDto>>(projects);
+                return await _projectRepository.GetPagedAsync(pagination, cancellationToken);
             }
 
             var userId = _currentUserService.UserId;
 
             if (!userId.HasValue)
             {
-                return new List<ProjectResponseDto>();
+                return new PagedResultDto<ProjectResponseDto>
+                {
+                    PageNumber = pagination.PageNumber,
+                    PageSize = pagination.PageSize
+                };
             }
 
-            var accessibleProjects = await _projectRepository
-                .GetAccessibleProjectsAsync(userId.Value);
-
-            return _mapper.Map<List<ProjectResponseDto>>(accessibleProjects);
+            return await _projectRepository.GetAccessiblePagedAsync(
+                userId.Value,
+                pagination,
+                cancellationToken);
         }
 
         // Update a project
-        public async Task<ServiceResult<ProjectResponseDto>> UpdateAsync(int id, ProjectDto projectDto)
+        public async Task<ServiceResult<ProjectResponseDto>> UpdateAsync(int id, ProjectDto projectDto, CancellationToken cancellationToken = default)
         {
             var validationResult = new ServiceResult<ProjectResponseDto>();
 
@@ -196,7 +197,7 @@
                 return validationResult;
             }
 
-            var project = await _projectRepository.FindByIDAsync(id);
+            var project = await _projectRepository.FindByIDAsync(id, cancellationToken);
 
             if (project == null)
             {
@@ -223,7 +224,7 @@
                 return validationResult;
             }
 
-            var owner = await _userRepository.FindByIDAsync(projectDto.OwnerId);
+            var owner = await _userRepository.FindByIDAsync(projectDto.OwnerId, cancellationToken);
 
             if (owner == null)
             {
@@ -239,18 +240,20 @@
                 project.OwnerId = owner.Id;
             }
 
-            await _unitOfWork.SaveChangesAsync();
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             validationResult.Success = true;
-            validationResult.Data = _mapper.Map<ProjectResponseDto>(project);
+            validationResult.Data = ProjectMapper.ToResponseDto(project);
 
             return validationResult;
         }
 
         // Get all projected projects
-        public async Task<List<ProjectResponseDto>> GetAllProjectedAsync()
+        public async Task<PagedResultDto<ProjectResponseDto>> GetAllProjectedAsync(
+            PaginationQueryDto pagination,
+            CancellationToken cancellationToken = default)
         {
-            return await _projectRepository.GetAllProjectedAsync();
+            return await _projectRepository.GetPagedAsync(pagination, cancellationToken);
         }
     }
 }

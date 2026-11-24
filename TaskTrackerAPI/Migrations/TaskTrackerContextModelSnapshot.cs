@@ -82,6 +82,8 @@ namespace TaskTrackerAPI.Migrations
                     b.HasIndex("EmailHash")
                         .IsUnique();
 
+                    b.HasIndex("LastFailedAttempt");
+
                     b.ToTable("LoginAttempts");
                 });
 
@@ -106,6 +108,8 @@ namespace TaskTrackerAPI.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("OperationId");
+
+                    b.HasIndex("CreatedAt");
 
                     b.ToTable("LoginAttemptOperations");
                 });
@@ -169,7 +173,10 @@ namespace TaskTrackerAPI.Migrations
 
                     b.HasIndex("ProjectId");
 
-                    b.ToTable("Tasks");
+                    b.ToTable("Tasks", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Tasks_Status", "[Status] IN (1, 2, 3)");
+                        });
                 });
 
             modelBuilder.Entity("TaskTrackerAPI.Models.User", b =>
@@ -195,17 +202,32 @@ namespace TaskTrackerAPI.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                    b.Property<int>("Role")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("TwoFactorEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<long?>("TwoFactorLastUsedTimeStep")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TwoFactorRecoveryCodeHashesJson")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("TwoFactorSecretProtected")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Users_Role", "[Role] IN (1, 2)");
+                        });
                 });
 
             modelBuilder.Entity("TaskTrackerAPI.Models.Comment", b =>

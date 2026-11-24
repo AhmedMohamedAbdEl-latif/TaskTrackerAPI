@@ -80,6 +80,29 @@ namespace TaskTrackerAPI.Extensions
 
                 options.Events = new JwtBearerEvents
                 {
+                    OnChallenge = async context =>
+                    {
+                        context.HandleResponse();
+                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        await context.Response.WriteAsJsonAsync(new ServiceResult
+                        {
+                            Success = false,
+                            ErrorType = ServiceErrorType.Unauthorized,
+                            Errors = new List<string> { "Authentication is required or the token is invalid." },
+                            TraceId = context.HttpContext.TraceIdentifier
+                        }, context.HttpContext.RequestAborted);
+                    },
+                    OnForbidden = async context =>
+                    {
+                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        await context.Response.WriteAsJsonAsync(new ServiceResult
+                        {
+                            Success = false,
+                            ErrorType = ServiceErrorType.Forbidden,
+                            Errors = new List<string> { "You are not allowed to perform this action." },
+                            TraceId = context.HttpContext.TraceIdentifier
+                        }, context.HttpContext.RequestAborted);
+                    },
                     OnTokenValidated = async context =>
                     {
                         var validationService = context.HttpContext
@@ -88,7 +111,9 @@ namespace TaskTrackerAPI.Extensions
                                 ICurrentUserValidationService>();
 
                         var isValid = await validationService
-                            .ValidateAsync(context.Principal!);
+                            .ValidateAsync(
+                                context.Principal!,
+                                context.HttpContext.RequestAborted);
 
                         if (!isValid)
                         {

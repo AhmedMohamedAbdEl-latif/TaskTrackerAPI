@@ -19,6 +19,12 @@ namespace TaskTrackerAPI.Models
         {
             base.OnModelCreating(modelBuilder);
             modelBuilder.Entity<ProjectTask>()
+                .ToTable("Tasks", table => table.HasCheckConstraint("CK_Tasks_Status", "[Status] IN (1, 2, 3)"));
+
+            modelBuilder.Entity<User>()
+                .ToTable("Users", table => table.HasCheckConstraint("CK_Users_Role", "[Role] IN (1, 2)"));
+
+            modelBuilder.Entity<ProjectTask>()
                 .HasOne(t => t.Project)
                 .WithMany()
                 .HasForeignKey(t => t.ProjectId)
@@ -43,6 +49,13 @@ namespace TaskTrackerAPI.Models
             modelBuilder.Entity<LoginAttempt>()
                 .HasIndex(la => la.EmailHash)
                 .IsUnique();
+
+            modelBuilder.Entity<LoginAttempt>()
+                .HasIndex(la => la.LastFailedAttempt);
+
+            modelBuilder.Entity<LoginAttemptOperation>()
+                .HasIndex(operation => operation.CreatedAt);
+
 
             modelBuilder.Entity<Comment>()
                 .HasOne(c => c.Task)
